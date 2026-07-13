@@ -886,3 +886,8 @@ def report():
         "report.html", rows=rows, shift_types=types, year=year, month=month,
         month_name=MONTH_NAMES[month], month_names=MONTH_NAMES,
     )
+
+
+@bp.route("/guida")
+def guide():
+    return render_template("guide.html")

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Guida - Gestione Turni{% endblock %}
+{% block content %}
+<h1>Guida pratica</h1>
+<p>Come usare l'app, passo per passo. Le sezioni "una tantum" si configurano una volta sola per reparto; le sezioni "ogni mese" si ripetono ad ogni ciclo di pianificazione.</p>
+
+<div class="card">
+  <h2>1. Prima configurazione (una tantum)</h2>
+  <ol>
+    <li>
+      <strong><a href="{{ url_for('main.employees') }}">Dipendenti</a></strong>: aggiungi ogni medico con un codice
+      breve (es. "ROS"), il nome, ed elenca le sue <strong>skill</strong> separate da virgola
+      (es. <code>PR,GN,MODA</code>). Le skill sono il modo con cui l'app decide chi può coprire quale turno —
+      vanno assegnate con attenzione, sono la base di tutto il resto.
+    </li>
+    <li>
+      <strong><a href="{{ url_for('main.shift_types') }}">Tipi di turno</a></strong>: definisci ogni turno
+      (Guardia Notte, Corsia A, Ambulatorio Breast, ecc.) con fasce orarie, skill richiesta, giorni della
+      settimana in cui è previsto, e quante persone servono per ciascun giorno. Qui si configurano anche le
+      regole più tecniche: turno "esclusivo" (nessun altro turno lo stesso giorno), "smonto" (riposo il giorno
+      dopo), distanza minima tra due occorrenze, "a blocco settimanale" (come la corsia, stessa persona tutta
+      la settimana) o "extra" (attivabile solo su richiesta).
+    </li>
+    <li>
+      <strong><a href="{{ url_for('main.weekend_pattern') }}">Weekend</a></strong>: se il weekend è organizzato
+      "a ruoli" (uno stesso medico copre più turni diversi tra sabato e domenica, come in Chirurgia Generale),
+      definiscilo qui. Ogni ruolo è una sequenza di (giorno, turno, skill richiesta per quel ruolo).
+    </li>
+    <li>
+      <strong><a href="{{ url_for('main.rules') }}">Regole</a></strong>: oltre al limite di giorni lavorativi
+      consecutivi, qui puoi aggiungere <strong>regole legate a una skill</strong> (non a un turno) — es. "chi ha
+      skill BREAST non va messo di turno lunedì" (Blocca) oppure "almeno uno con skill BREAST deve restare
+      libero martedì" (Riserva). Utile per proteggere chi fa attività fuori dall'app.
+    </li>
+    <li>
+      <strong><a href="{{ url_for('main.preferences') }}">Preferenze</a></strong> (facoltativo): pesi per
+      evitare/preferire/riservare un turno a un medico, o un tetto massimo mensile su un turno specifico.
+    </li>
+  </ol>
+</div>
+
+<div class="card">
+  <h2>2. Ogni mese</h2>
+  <ol>
+    <li>
+      <strong><a href="{{ url_for('main.availability') }}">Disponibilità</a></strong>: scegli mese e anno,
+      indica per ogni medico e giorno lo stato (disponibile di default, non disponibile tutto il giorno o solo
+      una fascia, ferie, malattia).
+    </li>
+    <li>
+      <strong><a href="{{ url_for('main.suppressions') }}">Soppressioni</a></strong>: se un turno normalmente
+      previsto non serve in una data (o in un intervallo di date, es. un servizio fermo in estate), sospendilo
+      qui — non verrà segnalato come scoperto.
+    </li>
+    <li>
+      <strong><a href="{{ url_for('main.extra_shifts') }}">Extra</a></strong>: attiva un turno "extra" su una
+      data puntuale (es. una festività infrasettimanale che richiede R2/Urg come un weekend).
+    </li>
+  </ol>
+</div>
+
+<div class="card">
+  <h2>3. Generare e correggere</h2>
+  <ol>
+    <li>
+      Vai in <strong><a href="{{ url_for('main.schedule') }}">Pianificazione</a></strong>,
+      scegli mese e anno, clicca <strong>"Genera turni automaticamente"</strong>. L'app assegna tutti i turni
+      rispettando skill, smonto, distanze minime, ruoli weekend, corsia settimanale e le regole skill, cercando
+      di distribuire il carico in modo equo (anche rispetto al mese precedente).
+    </li>
+    <li>
+      Se qualcosa non è coperto (mancanza di personale disponibile/qualificato) compare un <strong>avviso</strong>
+      con giorno e turno interessato — non è un errore dell'app, è un vincolo reale che non è risolvibile con i
+      dati inseriti.
+    </li>
+    <li>
+      La vista è di sola lettura per default (più leggibile). Per correggere a mano, usa
+      <strong>"✏️ Modifica manualmente"</strong>: ogni cella diventa un elenco con evidenziati gli assegnati.
+    </li>
+    <li>
+      <strong><a href="{{ url_for('main.report') }}">Report</a></strong> mostra i conteggi per medico e turno
+      del mese, utile per controllare l'equità a colpo d'occhio. <strong>Esporta CSV</strong> dalla pagina
+      Pianificazione per stampare o condividere il piano.
+    </li>
+  </ol>
+</div>
+
+<div class="card">
+  <h2>Domande frequenti</h2>
+  <p><strong>Riconosce automaticamente i giorni della settimana giusti per il mese scelto?</strong><br>
+  Sì, sempre — usa il calendario reale, si adatta da solo a mesi di 28/29/30/31 giorni e riconosce sabati/domeniche
+  per i ruoli weekend.</p>
+
+  <p><strong>Conosce le festività?</strong><br>
+  No, non ancora. Per un giorno festivo infrasettimanale devi sospendere manualmente i turni feriali che quel
+  giorno non ci sono (Soppressioni) ed eventualmente attivare turni tipo weekend (Extra).</p>
+
+  <p><strong>Posso importare le disponibilità da un file esterno (Excel, ecc.)?</strong><br>
+  No, oggi si inseriscono solo a mano nella griglia. Non c'è ancora un modo per far compilare direttamente ai
+  colleghi un link personale con restrizioni — è una funzionalità pianificata per il futuro.</p>
+
+  <p><strong>Un reparto vede i dati di un altro?</strong><br>
+  No: ogni reparto (profilo) ha un database completamente separato. Usa "Cambia reparto" in alto per passare
+  da uno all'altro.</p>
+</div>
+{% endblock %}
