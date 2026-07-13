@@ -264,7 +264,10 @@ def generate_schedule(
         return result
 
     # --- Pass 1: weekend a ruoli (stesso medico copre tutti i turni del proprio ruolo nel weekend) ---
-    weekend_shift_ids = {r.shift_type_id for r in weekend_roles}
+    # Un turno e' "coperto dal weekend" solo nel giorno specifico (SAB o DOM) in cui
+    # compare in un ruolo: es. GN il sabato e R2N la domenica sono due turni diversi,
+    # e ciascuno resta soggetto al fabbisogno ordinario nell'altro giorno del weekend.
+    weekend_controlled_day = {(r.shift_type_id, r.day) for r in weekend_roles}
     weekends = []
     d = 1
     while d <= num_days:
@@ -384,8 +387,9 @@ def generate_schedule(
 
     for day in range(1, num_days + 1):
         weekday = weekday_of(day)
+        day_code = "SAB" if weekday == SATURDAY else ("DOM" if weekday == SUNDAY else None)
         for shift_type in ordinary_types:
-            if weekday in (SATURDAY, SUNDAY) and shift_type.id in weekend_shift_ids:
+            if day_code and (shift_type.id, day_code) in weekend_controlled_day:
                 continue
             if shift_type.days_set and weekday not in shift_type.days_set:
                 continue

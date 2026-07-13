@@ -101,6 +101,26 @@ def test_requires_rest_next_day_exception_saturday_sunday():
     assert (2, 4) in assignments_by_shift_day
 
 
+def test_weekend_role_only_blocks_its_own_day_not_the_whole_weekend():
+    # GN e' nel ruolo weekend solo di sabato, "Reperibilita" solo di domenica:
+    # GN deve restare assegnabile ordinariamente la domenica, e "Reperibilita"
+    # deve restare assegnabile ordinariamente il sabato (2026-01-03 = sabato).
+    employees = [emp(1, "A", skills={"X"}), emp(2, "B", skills={"X"})]
+    night = shift(1, "Notte", skill_required="X", priority=1)
+    reperibilita = shift(2, "Reperibilita", skill_required="X", priority=2)
+
+    weekend_roles = [
+        WeekendRoleInput(role_code="A", day="SAB", shift_type_id=1, skill_required="X"),
+        WeekendRoleInput(role_code="A", day="DOM", shift_type_id=2, skill_required="X"),
+    ]
+
+    result = run(employees=employees, shift_types=[night, reperibilita], weekend_roles=weekend_roles)
+
+    assignments_by_shift_day = {(a["shift_type_id"], a["day"]) for a in result.assignments}
+    assert (1, 4) in assignments_by_shift_day  # Notte anche la domenica (giorno 4)
+    assert (2, 3) in assignments_by_shift_day  # Reperibilita anche il sabato (giorno 3)
+
+
 def test_weekly_block_same_employee_all_week():
     employees = [emp(1, "A", skills=set()), emp(2, "B", skills=set())]
     corsia = ShiftTypeInput(

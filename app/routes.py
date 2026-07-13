@@ -54,31 +54,91 @@ AVAILABILITY_OPTIONS = [
 ]
 
 
+FERIALI = {0, 1, 2, 3, 4}
+
+# Catalogo di riferimento per un reparto di chirurgia generale, basato sulle
+# regole reali condivise dall'utente (script Apps Script + turni di luglio).
+# Alcuni campi (skill_required per GG/R1_G, uso di PO/R2_URG) sono marcati
+# come "da confermare" nelle note e vanno rivisti con dati reali.
+SEED_SHIFT_TYPES = [
+    dict(code="GN", name="Guardia Notte", group="NOTTE", color="#7c5cbf", priority=10,
+         time_bands="NOTTE", skill_required="GN", days_set="",
+         exclusive_day=True, requires_rest_next_day=True, min_gap_days=2,
+         required_by_weekday={d: 1 for d in range(7)}),
+    dict(code="R1N", name="Reperibilità Notte 1", group="NOTTE", color="#9b8ad6", priority=11,
+         time_bands="NOTTE", skill_required="PR", days_set="",
+         required_by_weekday={d: 1 for d in range(7)}),
+    dict(code="R2N", name="Reperibilità Notte 2", group="NOTTE", color="#9b8ad6", priority=12,
+         time_bands="NOTTE", skill_required="SR", days_set="",
+         required_by_weekday={d: 1 for d in range(7)}),
+    dict(code="GG", name="Guardia Giorno", group="GUARDIA", color="#4f7cff", priority=20,
+         time_bands="MATTINA,POMERIGGIO", skill_required="", days_set="",
+         required_by_weekday={d: 1 for d in range(7)},
+         notes="Skill richiesta da confermare"),
+    dict(code="R1G", name="Reperibilità Giorno 1", group="GUARDIA", color="#7c9bff", priority=21,
+         time_bands="POMERIGGIO", skill_required="PR", days_set="",
+         required_by_weekday={d: 1 for d in range(7)}),
+    dict(code="MODA", name="Corsia A", group="CORSIA", color="#1a9c5c", priority=40,
+         time_bands="MATTINA,POMERIGGIO", skill_required="", days_set=",".join(map(str, FERIALI)),
+         weekly_block=True, block_group="CORSIA"),
+    dict(code="MODB", name="Corsia B", group="CORSIA", color="#1a9c5c", priority=41,
+         time_bands="MATTINA,POMERIGGIO", skill_required="", days_set=",".join(map(str, FERIALI)),
+         weekly_block=True, block_group="CORSIA"),
+    dict(code="BREAST", name="Ambulatorio Breast", group="AMBULATORIO", color="#e05780", priority=30,
+         time_bands="MATTINA", skill_required="BREAST", days_set=",".join(map(str, FERIALI)),
+         required_by_weekday={0: 2, 1: 1, 2: 2, 3: 1, 4: 1}),
+    dict(code="MEDIC", name="Ambulatorio Medic", group="AMBULATORIO", color="#f2994a", priority=55,
+         time_bands="MATTINA", skill_required="", days_set=",".join(map(str, FERIALI)),
+         required_by_weekday={d: 1 for d in FERIALI}),
+    dict(code="VISLUN", name="Visite (Lunedì)", group="AMBULATORIO", color="#f2994a", priority=56,
+         time_bands="MATTINA", skill_required="", days_set="0",
+         required_by_weekday={0: 1}),
+    dict(code="VISGIO", name="Visite (Giovedì)", group="AMBULATORIO", color="#f2994a", priority=57,
+         time_bands="MATTINA", skill_required="", days_set="3",
+         required_by_weekday={3: 1}),
+    dict(code="CHIR", name="Ambulatorio Chir", group="AMBULATORIO", color="#f2994a", priority=58,
+         time_bands="MATTINA", skill_required="", days_set=",".join(map(str, FERIALI)),
+         required_by_weekday={d: 1 for d in FERIALI}),
+    dict(code="PROCT", name="Ambulatorio Proct", group="AMBULATORIO", color="#f2994a", priority=59,
+         time_bands="MATTINA", skill_required="", days_set=",".join(map(str, FERIALI)),
+         required_by_weekday={d: 1 for d in FERIALI}),
+    dict(code="GOMSUP", name="GOM Superiore", group="GOM", color="#b5750f", priority=60,
+         time_bands="MATTINA", skill_required="", days_set=",".join(map(str, FERIALI)),
+         required_by_weekday={d: 1 for d in FERIALI}),
+    dict(code="GOMINF", name="GOM Inferiore", group="GOM", color="#b5750f", priority=61,
+         time_bands="MATTINA", skill_required="", days_set=",".join(map(str, FERIALI)),
+         required_by_weekday={d: 1 for d in FERIALI}),
+    dict(code="CDP", name="CDP", group="EXTRA", color="#999999", priority=90,
+         time_bands="MATTINA", skill_required="", is_extra=True),
+    dict(code="ABB", name="ABB", group="EXTRA", color="#999999", priority=91,
+         time_bands="MATTINA,POMERIGGIO", skill_required="", is_extra=True),
+]
+
+
 def seed_defaults():
     if ShiftType.query.count() > 0:
         return
 
-    gn = ShiftType(
-        code="GN", name="Guardia Notte", group="NOTTE", color="#7c5cbf", sort_order=0, priority=10,
-        time_bands="NOTTE", days_set="", exclusive_day=True, requires_rest_next_day=True,
-        min_gap_days=2,
-    )
-    gg = ShiftType(
-        code="GG", name="Guardia Giorno", group="GUARDIA", color="#4f7cff", sort_order=1, priority=20,
-        time_bands="MATTINA,POMERIGGIO",
-    )
-    amb = ShiftType(
-        code="AMB", name="Ambulatorio", group="AMBULATORIO", color="#f2994a", sort_order=2, priority=50,
-        time_bands="MATTINA",
-    )
+    created = {}
+    for spec in SEED_SHIFT_TYPES:
+        required_by_weekday = spec.pop("required_by_weekday", {})
+        spec.pop("notes", None)
+        st = ShiftType(sort_order=len(created), **spec)
+        db.session.add(st)
+        db.session.flush()
+        for weekday, count in required_by_weekday.items():
+            db.session.add(ShiftRequirement(shift_type_id=st.id, weekday=weekday, required_staff=count))
+        created[st.code] = st
 
-    db.session.add_all([gn, gg, amb])
-    db.session.flush()
-    gn.rest_exception_shift_type_id = None
-
-    for st, required in ((gn, 1), (gg, 1), (amb, 1)):
-        for weekday in range(7):
-            db.session.add(ShiftRequirement(shift_type_id=st.id, weekday=weekday, required_staff=required))
+    # Smonto: dopo GN, riposo il giorno dopo; eccezione sab->dom con R2N
+    # (stessa logica della regola "GN sabato + R2_N domenica" dello script).
+    created["GN"].rest_exception_shift_type_id = created["R2N"].id
+    db.session.add(
+        WeekendPatternRole(role_code="A", day="SAB", shift_type_id=created["GN"].id, skill_required="GN")
+    )
+    db.session.add(
+        WeekendPatternRole(role_code="A", day="DOM", shift_type_id=created["R2N"].id, skill_required="SR")
+    )
 
     Settings.get()
     db.session.commit()
