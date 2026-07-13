@@ -41,16 +41,16 @@ MONTH_NAMES = [
 ]
 
 AVAILABILITY_OPTIONS = [
-    ("OK", "Disponibile"),
-    ("NO", "Non disponibile (intera giornata)"),
+    ("OK", "Disp."),
+    ("NO", "No (tutto il giorno)"),
     ("FERIE", "Ferie"),
     ("MAL", "Malattia"),
-    ("NO_MATTINA", "Non disp. mattina"),
-    ("NO_POMERIGGIO", "Non disp. pomeriggio"),
-    ("NO_NOTTE", "Non disp. notte"),
-    ("NO_MATTINA|NO_POMERIGGIO", "Non disp. mattina+pomeriggio"),
-    ("NO_MATTINA|NO_NOTTE", "Non disp. mattina+notte"),
-    ("NO_POMERIGGIO|NO_NOTTE", "Non disp. pomeriggio+notte"),
+    ("NO_MATTINA", "No mattina"),
+    ("NO_POMERIGGIO", "No pomeriggio"),
+    ("NO_NOTTE", "No notte"),
+    ("NO_MATTINA|NO_POMERIGGIO", "No mattina+pom."),
+    ("NO_MATTINA|NO_NOTTE", "No mattina+notte"),
+    ("NO_POMERIGGIO|NO_NOTTE", "No pom.+notte"),
 ]
 
 
@@ -493,11 +493,12 @@ def schedule():
         grid.setdefault((a.day, a.shift_type_id), []).append(a.employee)
 
     day_weekday_names = [WEEKDAY_NAMES[(first_weekday + d) % 7] for d in range(num_days)]
+    edit_mode = request.args.get("modifica") == "1"
 
     return render_template(
         "schedule.html", employees=people, shift_types=types, year=year, month=month,
         month_name=MONTH_NAMES[month], month_names=MONTH_NAMES, day_range=range(1, num_days + 1),
-        day_weekday_names=day_weekday_names, grid=grid,
+        day_weekday_names=day_weekday_names, grid=grid, edit_mode=edit_mode,
     )
 
 

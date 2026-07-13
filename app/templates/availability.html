@@ -33,7 +33,9 @@
           {% for day in day_range %}
           {% set current = avail_map.get((emp.id, day), 'OK') %}
           <td>
-            <select name="a_{{ emp.id }}_{{ day }}" style="min-width:8rem">
+            <select name="a_{{ emp.id }}_{{ day }}" style="width:6.5rem"
+                    class="{% if current == 'OK' %}status-available{% else %}status-unavailable{% endif %}"
+                    onchange="this.className = this.value === 'OK' ? 'status-available' : 'status-unavailable'">
               {% for value, label in options %}
               <option value="{{ value }}" {% if current == value %}selected{% endif %}>{{ label }}</option>
               {% endfor %}

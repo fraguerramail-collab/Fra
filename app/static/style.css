@@ -92,6 +92,22 @@ th, td {
 th { background: #f0f2f8; }
 
 .table-scroll { overflow-x: auto; }
+.table-scroll table th:first-child,
+.table-scroll table td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--card);
+  z-index: 1;
+}
+.table-scroll table th:first-child { background: #f0f2f8; z-index: 2; }
+
+label {
+  display: inline-block;
+  vertical-align: top;
+  margin: 0 1rem 0.75rem 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
 
 input[type=text], input[type=number], input[type=time], input[type=color], select {
   padding: 0.35rem 0.5rem;
@@ -154,3 +170,13 @@ select.status-preferred_off { background: #fdf1de; }
 }
 
 .chip-list { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.chip {
+  display: inline-block;
+  background: #eef1fa;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.empty-cell { color: var(--muted); }

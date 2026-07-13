@@ -12,9 +12,15 @@
     </select>
   </label>
   <label>Anno <input type="number" name="anno" value="{{ year }}" style="width:6rem"></label>
+  {% if edit_mode %}<input type="hidden" name="modifica" value="1">{% endif %}
   <button type="submit">Vai</button>
 
   <a class="btn secondary" href="{{ url_for('main.export_schedule_csv', anno=year, mese=month) }}">Esporta CSV</a>
+  {% if edit_mode %}
+  <a class="btn secondary" href="{{ url_for('main.schedule', anno=year, mese=month) }}">👁 Vista sola lettura</a>
+  {% else %}
+  <a class="btn secondary" href="{{ url_for('main.schedule', anno=year, mese=month, modifica=1) }}">✏️ Modifica manualmente</a>
+  {% endif %}
 </form>
 
 <form method="post" action="{{ url_for('main.generate') }}" class="toolbar" onsubmit="return confirm('Questo sovrascriverà i turni generati automaticamente per questo mese (le modifiche manuali salvate restano se non le rigeneri). Continuare?');">
@@ -25,6 +31,7 @@
 
 <p><small>Assicurati di aver inserito le <a href="{{ url_for('main.availability', anno=year, mese=month) }}">disponibilità</a> per {{ month_name }} {{ year }} prima di generare.</small></p>
 
+{% if edit_mode %}
 <form method="post" action="{{ url_for('main.save_schedule') }}">
   <input type="hidden" name="anno" value="{{ year }}">
   <input type="hidden" name="mese" value="{{ month }}">
@@ -45,7 +52,7 @@
           {% for st in shift_types %}
           {% set assigned = grid.get((day, st.id), []) %}
           <td class="cell-slot">
-            <select name="slot_{{ day }}_{{ st.id }}" multiple size="3" style="width:100%">
+            <select name="slot_{{ day }}_{{ st.id }}" multiple size="4" style="width:100%">
               {% for emp in employees %}
               <option value="{{ emp.id }}" {% if emp in assigned %}selected{% endif %}>{{ emp.name }}</option>
               {% endfor %}
@@ -58,6 +65,40 @@
     </table>
   </div>
   <button type="submit">Salva modifiche manuali</button>
-  <p><small>Tieni premuto Ctrl (Cmd su Mac) per selezionare più dipendenti nella stessa cella.</small></p>
+  <p><small>Tieni premuto Ctrl (Cmd su Mac) per selezionare più dipendenti nella stessa cella. Ogni cella mostra <em>tutti</em> i dipendenti: quelli evidenziati sono gli assegnati.</small></p>
 </form>
+{% else %}
+<div class="card table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>Giorno</th>
+        {% for st in shift_types %}
+        <th><span class="pill" style="background: {{ st.color }}">{{ st.code }}</span> {{ st.name }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for day in day_range %}
+      <tr>
+        <td>{{ day }}<br><small>{{ day_weekday_names[day-1] }}</small></td>
+        {% for st in shift_types %}
+        {% set assigned = grid.get((day, st.id), []) %}
+        <td class="cell-slot">
+          {% if assigned %}
+          <div class="chip-list">
+            {% for emp in assigned %}<span class="chip">{{ emp.name }}</span>{% endfor %}
+          </div>
+          {% else %}
+          <span class="empty-cell">—</span>
+          {% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p><small>Vista di sola lettura. Usa "✏️ Modifica manualmente" qui sopra per correggere le assegnazioni.</small></p>
+{% endif %}
 {% endblock %}
