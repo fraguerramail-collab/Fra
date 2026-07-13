@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Regole - Gestione Turni{% endblock %}
+{% block content %}
+<h1>Regole di generazione</h1>
+
+<div class="card">
+  <h2>Regole globali</h2>
+  <form method="post" action="{{ url_for('main.rules') }}">
+    <label>Giorni lavorativi consecutivi massimi<br>
+      <input type="number" name="max_consecutive_work_days" min="1" max="31" value="{{ settings.max_consecutive_work_days }}">
+    </label>
+    <br><br>
+    <label>
+      <input type="checkbox" name="require_weekly_day_off" {% if settings.require_weekly_day_off %}checked{% endif %}>
+      Garantisci almeno un giorno di riposo per ogni settimana (lun-dom)
+    </label>
+    <br><br>
+    <button type="submit">Salva regole</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Sequenze di turni vietate</h2>
+  <p>Impedisce che un dipendente faccia il turno "Successivo" il giorno dopo aver fatto il turno "Precedente" (es. Notte → Mattina).</p>
+
+  <form method="post" action="{{ url_for('main.rules') }}">
+    <input type="hidden" name="action" value="add_sequence">
+    <label>Turno precedente
+      <select name="prev_shift_type_id">
+        {% for st in shift_types %}<option value="{{ st.id }}">{{ st.name }}</option>{% endfor %}
+      </select>
+    </label>
+    &nbsp;→&nbsp;
+    <label>Turno vietato il giorno dopo
+      <select name="next_shift_type_id">
+        {% for st in shift_types %}<option value="{{ st.id }}">{{ st.name }}</option>{% endfor %}
+      </select>
+    </label>
+    &nbsp;
+    <button type="submit">Aggiungi regola</button>
+  </form>
+
+  <table style="margin-top:1rem; max-width:500px">
+    <thead><tr><th>Precedente</th><th>Vietato il giorno dopo</th><th></th></tr></thead>
+    <tbody>
+      {% for seq in sequences %}
+      <tr>
+        <td>{{ seq.prev_shift_type.name }}</td>
+        <td>{{ seq.next_shift_type.name }}</td>
+        <td>
+          <form class="inline" method="post" action="{{ url_for('main.delete_sequence', sequence_id=seq.id) }}">
+            <button type="submit" class="danger">Elimina</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3">Nessuna regola di sequenza definita.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

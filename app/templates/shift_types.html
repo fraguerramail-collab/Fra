@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Tipi di turno - Gestione Turni{% endblock %}
+{% block content %}
+<h1>Tipi di turno</h1>
+
+<div class="card">
+  <h2>Aggiungi tipo di turno</h2>
+  <form method="post" action="{{ url_for('main.shift_types') }}">
+    <label>Nome<br><input type="text" name="name" required></label>
+    &nbsp;
+    <label>Sigla<br><input type="text" name="code" maxlength="10" style="width:5rem"></label>
+    &nbsp;
+    <label>Inizio<br><input type="time" name="start_time" value="07:00"></label>
+    &nbsp;
+    <label>Fine<br><input type="time" name="end_time" value="14:00"></label>
+    &nbsp;
+    <label>Colore<br><input type="color" name="color" value="#4f7cff"></label>
+    &nbsp;
+    <button type="submit">Aggiungi</button>
+  </form>
+</div>
+
+{% for st in shift_types %}
+<div class="card table-scroll">
+  <form method="post" action="{{ url_for('main.edit_shift_type', shift_type_id=st.id) }}">
+    <h2>
+      <span class="pill" style="background: {{ st.color }}">{{ st.code }}</span>
+      <input type="text" name="name" value="{{ st.name }}" style="font-size:1rem">
+    </h2>
+    <label>Sigla <input type="text" name="code" value="{{ st.code }}" style="width:4rem"></label>
+    &nbsp;
+    <label>Inizio <input type="time" name="start_time" value="{{ st.start_time }}"></label>
+    &nbsp;
+    <label>Fine <input type="time" name="end_time" value="{{ st.end_time }}"></label>
+    &nbsp;
+    <label>Colore <input type="color" name="color" value="{{ st.color }}"></label>
+
+    <h3>Personale richiesto per giorno della settimana</h3>
+    <table style="max-width:700px">
+      <thead><tr>{% for wd in weekday_names %}<th>{{ wd[:3] }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        <tr>
+          {% for weekday in range(7) %}
+          <td><input type="number" min="0" style="width:4rem" name="required_{{ weekday }}" value="{{ st.requirement_for_weekday(weekday) }}"></td>
+          {% endfor %}
+        </tr>
+      </tbody>
+    </table>
+    <br>
+    <button type="submit">Salva</button>
+  </form>
+  <form class="inline" method="post" action="{{ url_for('main.delete_shift_type', shift_type_id=st.id) }}" onsubmit="return confirm('Eliminare il turno {{ st.name }}?');">
+    <button type="submit" class="danger">Elimina turno</button>
+  </form>
+</div>
+{% else %}
+<p>Nessun tipo di turno configurato.</p>
+{% endfor %}
+{% endblock %}

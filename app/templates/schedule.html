@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Pianificazione - Gestione Turni{% endblock %}
+{% block content %}
+<h1>Pianificazione turni</h1>
+
+<form method="get" action="{{ url_for('main.schedule') }}" class="toolbar">
+  <label>Mese
+    <select name="mese">
+      {% for i in range(1, 13) %}
+      <option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ month_names[i] }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Anno <input type="number" name="anno" value="{{ year }}" style="width:6rem"></label>
+  <button type="submit">Vai</button>
+
+  <a class="btn secondary" href="{{ url_for('main.export_schedule_csv', anno=year, mese=month) }}">Esporta CSV</a>
+</form>
+
+<form method="post" action="{{ url_for('main.generate') }}" class="toolbar" onsubmit="return confirm('Questo sovrascriverà i turni generati automaticamente per questo mese (le modifiche manuali salvate restano se non le rigeneri). Continuare?');">
+  <input type="hidden" name="anno" value="{{ year }}">
+  <input type="hidden" name="mese" value="{{ month }}">
+  <button type="submit">Genera turni automaticamente</button>
+</form>
+
+<p><small>Assicurati di aver inserito le <a href="{{ url_for('main.availability', anno=year, mese=month) }}">disponibilità</a> per {{ month_name }} {{ year }} prima di generare.</small></p>
+
+<form method="post" action="{{ url_for('main.save_schedule') }}">
+  <input type="hidden" name="anno" value="{{ year }}">
+  <input type="hidden" name="mese" value="{{ month }}">
+  <div class="card table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Giorno</th>
+          {% for st in shift_types %}
+          <th><span class="pill" style="background: {{ st.color }}">{{ st.code }}</span> {{ st.name }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for day in day_range %}
+        <tr>
+          <td>{{ day }}<br><small>{{ day_weekday_names[day-1] }}</small></td>
+          {% for st in shift_types %}
+          {% set assigned = grid.get((day, st.id), []) %}
+          <td class="cell-slot">
+            <select name="slot_{{ day }}_{{ st.id }}" multiple size="3" style="width:100%">
+              {% for emp in employees %}
+              {% if st.id in qual_map.get(emp.id, []) %}
+              <option value="{{ emp.id }}" {% if emp in assigned %}selected{% endif %}>{{ emp.name }}</option>
+              {% endif %}
+              {% endfor %}
+            </select>
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <button type="submit">Salva modifiche manuali</button>
+  <p><small>Tieni premuto Ctrl (Cmd su Mac) per selezionare più dipendenti nella stessa cella.</small></p>
+</form>
+{% endblock %}

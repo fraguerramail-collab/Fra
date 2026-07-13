@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Disponibilità - Gestione Turni{% endblock %}
+{% block content %}
+<h1>Disponibilità mensile</h1>
+
+<form method="get" action="{{ url_for('main.availability') }}" class="toolbar">
+  <label>Mese
+    <select name="mese">
+      {% for i in range(1, 13) %}
+      <option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ month_names[i] }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Anno <input type="number" name="anno" value="{{ year }}" style="width:6rem"></label>
+  <button type="submit">Vai</button>
+</form>
+
+<p>Per ogni dipendente e giorno, indica lo stato: <strong>Disponibile</strong> (default), <strong>Non disponibile</strong> o <strong>Preferenza riposo</strong> (disponibile solo se necessario).</p>
+
+<form method="post" action="{{ url_for('main.availability', anno=year, mese=month) }}">
+  <div class="card table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Dipendente</th>
+          {% for day in day_range %}<th>{{ day }}<br><small>{{ day_weekday_names[day-1] }}</small></th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for emp in employees %}
+        <tr>
+          <td>{{ emp.name }}</td>
+          {% for day in day_range %}
+          {% set current = avail_map.get((emp.id, day), 'AVAILABLE') %}
+          <td>
+            <select name="a_{{ emp.id }}_{{ day }}" class="status-{{ current|lower }}" onchange="this.className='status-'+this.value.toLowerCase()">
+              <option value="AVAILABLE" {% if current == 'AVAILABLE' %}selected{% endif %}>Disp.</option>
+              <option value="UNAVAILABLE" {% if current == 'UNAVAILABLE' %}selected{% endif %}>Non disp.</option>
+              <option value="PREFERRED_OFF" {% if current == 'PREFERRED_OFF' %}selected{% endif %}>Pref. riposo</option>
+            </select>
+          </td>
+          {% endfor %}
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ num_days + 1 }}">Nessun dipendente attivo. Aggiungine uno nella pagina Dipendenti.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <button type="submit">Salva disponibilità</button>
+</form>
+{% endblock %}

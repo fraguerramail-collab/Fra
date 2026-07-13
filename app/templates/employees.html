@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Dipendenti - Gestione Turni{% endblock %}
+{% block content %}
+<h1>Dipendenti</h1>
+
+<div class="card">
+  <h2>Aggiungi dipendente</h2>
+  <form method="post" action="{{ url_for('main.employees') }}">
+    <label>Nome<br><input type="text" name="name" required></label>
+    &nbsp;
+    <label>Max turni/settimana (opzionale)<br><input type="number" name="max_shifts_per_week" min="1"></label>
+    &nbsp;
+    <button type="submit">Aggiungi</button>
+  </form>
+</div>
+
+<div class="card table-scroll">
+  <h2>Elenco</h2>
+  <table>
+    <thead>
+      <tr><th>Nome</th><th>Attivo</th><th>Max turni/sett.</th><th>Note</th><th>Azioni</th></tr>
+    </thead>
+    <tbody>
+      {% for emp in employees %}
+      <tr>
+        <td><input type="text" name="name" value="{{ emp.name }}" form="emp-form-{{ emp.id }}"></td>
+        <td><input type="checkbox" name="active" {% if emp.active %}checked{% endif %} form="emp-form-{{ emp.id }}"></td>
+        <td><input type="number" name="max_shifts_per_week" min="1" value="{{ emp.max_shifts_per_week or '' }}" style="width:5rem" form="emp-form-{{ emp.id }}"></td>
+        <td><input type="text" name="notes" value="{{ emp.notes or '' }}" form="emp-form-{{ emp.id }}"></td>
+        <td>
+          <form id="emp-form-{{ emp.id }}" method="post" action="{{ url_for('main.edit_employee', employee_id=emp.id) }}" class="inline"></form>
+          <button type="submit" form="emp-form-{{ emp.id }}">Salva</button>
+          <form class="inline" method="post" action="{{ url_for('main.delete_employee', employee_id=emp.id) }}" onsubmit="return confirm('Eliminare {{ emp.name }}?');">
+            <button type="submit" class="danger">Elimina</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">Nessun dipendente inserito.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

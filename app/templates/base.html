@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Gestione Turni{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Gestione Turni</div>
+  <nav>
+    <a href="{{ url_for('main.index') }}">Home</a>
+    <a href="{{ url_for('main.employees') }}">Dipendenti</a>
+    <a href="{{ url_for('main.shift_types') }}">Tipi di turno</a>
+    <a href="{{ url_for('main.qualifications') }}">Qualifiche</a>
+    <a href="{{ url_for('main.rules') }}">Regole</a>
+    <a href="{{ url_for('main.availability') }}">Disponibilità</a>
+    <a href="{{ url_for('main.schedule') }}">Pianificazione</a>
+  </nav>
+</header>
+
+<main class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-list">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

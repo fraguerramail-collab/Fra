@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Home - Gestione Turni{% endblock %}
+{% block content %}
+<h1>Generatore automatico di turni mensili</h1>
+<p>Dipendenti attivi: <strong>{{ n_employees }}</strong> &middot; Tipi di turno configurati: <strong>{{ n_shift_types }}</strong></p>
+
+<div class="grid-links">
+  <a href="{{ url_for('main.employees') }}">👥 Dipendenti<br><small>Anagrafica del personale</small></a>
+  <a href="{{ url_for('main.shift_types') }}">🕒 Tipi di turno<br><small>Mattina, pomeriggio, notte, fabbisogno per giorno</small></a>
+  <a href="{{ url_for('main.qualifications') }}">✅ Qualifiche<br><small>Chi può coprire quale turno</small></a>
+  <a href="{{ url_for('main.rules') }}">📏 Regole<br><small>Giorni consecutivi, riposo, sequenze vietate</small></a>
+  <a href="{{ url_for('main.availability') }}">🗓️ Disponibilità<br><small>Disponibilità mensile per dipendente</small></a>
+  <a href="{{ url_for('main.schedule') }}">⚙️ Pianificazione<br><small>Genera ed esporta i turni del mese</small></a>
+</div>
+
+<div class="card">
+  <h2>Come funziona</h2>
+  <ol>
+    <li>Configura i <strong>tipi di turno</strong> e quante persone servono per ciascun giorno della settimana.</li>
+    <li>Configura le <strong>qualifiche</strong> (chi può fare quale turno) e le <strong>regole</strong> globali (giorni consecutivi massimi, riposo settimanale, sequenze vietate come Notte→Mattina).</li>
+    <li>Ogni mese, inserisci le <strong>disponibilità</strong> dei colleghi (le eccezioni: assenze, ferie, preferenze).</li>
+    <li>Vai in <strong>Pianificazione</strong>, scegli mese e anno e clicca "Genera turni": il sistema assegna automaticamente i turni rispettando le regole, distribuendo il carico in modo equo.</li>
+    <li>Puoi correggere manualmente il risultato ed esportarlo in CSV.</li>
+  </ol>
+</div>
+{% endblock %}
