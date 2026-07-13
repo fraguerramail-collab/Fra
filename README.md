@@ -33,6 +33,16 @@ ospedalieri) dove disponibilità e vincoli cambiano mese per mese.
 - **Report** con conteggi e avvisi per dipendente, **export CSV** ed
   editing manuale del piano generato.
 
+## Profili (reparti multipli)
+
+L'app supporta più "profili" (es. reparti diversi), ciascuno con il proprio
+database SQLite completamente separato: dipendenti, turni, regole, weekend,
+disponibilità e piani generati di un profilo non hanno alcun effetto sugli
+altri. Aprendo l'app si arriva a una pagina di scelta del reparto; da lì si
+può entrare in un reparto esistente o crearne uno nuovo (viene inizializzato
+subito con un catalogo turni di esempio, da adattare). Ogni reparto vive
+sotto `/p/<slug>/`.
+
 ## Avvio in locale
 
 ```bash
@@ -40,9 +50,10 @@ pip install -r requirements.txt
 python run.py
 ```
 
-L'app parte su `http://localhost:5000`. Il database SQLite viene creato
-automaticamente in `instance/turni.db` al primo avvio, con alcuni tipi di
-turno di esempio.
+L'app parte su `http://localhost:5000` con la pagina di scelta del reparto.
+I database SQLite vengono creati automaticamente in `instance/data_<slug>.db`
+alla prima apertura di ciascun reparto, con alcuni tipi di turno di esempio;
+l'elenco dei reparti è in `instance/profiles.json`.
 
 ## Test
 

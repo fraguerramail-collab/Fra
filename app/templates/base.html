@@ -8,7 +8,9 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">Gestione Turni</div>
+  <div class="brand">Gestione Turni <span class="profile-badge">{{ config.PROFILE_NAME }}</span>
+    <a href="/" class="switch-profile">Cambia reparto</a>
+  </div>
   <nav>
     <a href="{{ url_for('main.index') }}">Home</a>
     <a href="{{ url_for('main.employees') }}">Dipendenti</a>
