@@ -32,7 +32,7 @@
         <td><input type="text" name="code" value="{{ emp.code }}" style="width:5rem" form="emp-form-{{ emp.id }}"></td>
         <td><input type="text" name="name" value="{{ emp.name }}" form="emp-form-{{ emp.id }}"></td>
         <td><input type="text" name="category" value="{{ emp.category or '' }}" style="width:7rem" form="emp-form-{{ emp.id }}"></td>
-        <td><input type="text" name="skills" value="{{ emp.skills or '' }}" style="width:9rem" form="emp-form-{{ emp.id }}"></td>
+        <td><input type="text" name="skills" value="{{ emp.skills or '' }}" style="width:22rem" form="emp-form-{{ emp.id }}"></td>
         <td><input type="checkbox" name="active" {% if emp.active %}checked{% endif %} form="emp-form-{{ emp.id }}"></td>
         <td><input type="number" name="max_shifts_per_week" min="1" value="{{ emp.max_shifts_per_week or '' }}" style="width:4rem" form="emp-form-{{ emp.id }}"></td>
         <td><input type="text" name="notes" value="{{ emp.notes or '' }}" form="emp-form-{{ emp.id }}"></td>
