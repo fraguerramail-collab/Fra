@@ -4,6 +4,18 @@
 <h1>Generatore automatico di turni mensili</h1>
 <p>Dipendenti attivi: <strong>{{ n_employees }}</strong> &middot; Tipi di turno configurati: <strong>{{ n_shift_types }}</strong></p>
 
+{% if n_shift_types == 0 %}
+<div class="card">
+  <h2>Reparto vuoto</h2>
+  <p>Non ci sono ancora tipi di turno configurati. Puoi partire da zero in
+  <a href="{{ url_for('main.shift_types') }}">Tipi di turno</a>, oppure caricare un
+  catalogo di esempio (reparto di chirurgia generale a degenza) da adattare.</p>
+  <form method="post" action="{{ url_for('main.load_example') }}">
+    <button type="submit">Carica catalogo di esempio</button>
+  </form>
+</div>
+{% endif %}
+
 <div class="grid-links">
   <a href="{{ url_for('main.employees') }}">👥 Dipendenti<br><small>Anagrafica, fascia/categoria, skill</small></a>
   <a href="{{ url_for('main.shift_types') }}">🕒 Tipi di turno<br><small>Fasce orarie, skill, smonto, distanza minima, corsia settimanale, extra</small></a>

@@ -133,9 +133,14 @@ SEED_SHIFT_TYPES = [
 ]
 
 
-def seed_defaults():
+def load_example_catalog():
+    """Carica il catalogo di esempio (Chirurgia Generale a degenza) in un
+    profilo vuoto. Va chiamata esplicitamente (pagina Home / pulsante), non
+    all'avvio: un nuovo profilo puo' essere un reparto completamente diverso
+    (es. blocco operatorio) per cui questo catalogo non avrebbe senso.
+    """
     if ShiftType.query.count() > 0:
-        return
+        return False
 
     created = {}
     for spec in SEED_SHIFT_TYPES:
@@ -173,6 +178,7 @@ def seed_defaults():
 
     Settings.get()
     db.session.commit()
+    return True
 
 
 def _current_year_month():
@@ -235,6 +241,15 @@ def index():
     n_employees = Employee.query.filter_by(active=True).count()
     n_shift_types = ShiftType.query.count()
     return render_template("index.html", n_employees=n_employees, n_shift_types=n_shift_types)
+
+
+@bp.route("/carica-esempio", methods=["POST"])
+def load_example():
+    if load_example_catalog():
+        flash("Catalogo di esempio (Chirurgia Generale a degenza) caricato: adattalo alle tue esigenze.", "success")
+    else:
+        flash("Questo reparto ha gia' dei tipi di turno configurati: il catalogo di esempio non e' stato caricato.", "warning")
+    return redirect(url_for("main.index"))
 
 
 # ---------------------------------------------------------------- dipendenti

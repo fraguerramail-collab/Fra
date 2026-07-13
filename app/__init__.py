@@ -33,6 +33,5 @@ def create_app(test_config=None, profile_slug="default", profile_name=None, inst
 
     with app.app_context():
         db.create_all()
-        routes.seed_defaults()
 
     return app
