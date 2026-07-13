@@ -1,7 +1,7 @@
 import calendar
 import csv
 import io
-from datetime import date
+from datetime import date, timedelta
 
 from flask import Blueprint, flash, redirect, render_template, request, send_file, url_for
 
@@ -57,9 +57,10 @@ AVAILABILITY_OPTIONS = [
 FERIALI = {0, 1, 2, 3, 4}
 
 # Catalogo di riferimento per un reparto di chirurgia generale, basato sulle
-# regole reali condivise dall'utente (script Apps Script + turni di luglio).
-# Alcuni campi (skill_required per GG/R1_G, uso di PO/R2_URG) sono marcati
-# come "da confermare" nelle note e vanno rivisti con dati reali.
+# regole reali condivise dall'utente (script Apps Script + turni di luglio +
+# spiegazione del pattern weekend). Il campo skill_required di GG/R1G/R2URG/PO
+# resta un segnaposto (vuoto = nessuna skill) finche' l'utente non conferma i
+# codici skill esatti da usare.
 SEED_SHIFT_TYPES = [
     dict(code="GN", name="Guardia Notte", group="NOTTE", color="#7c5cbf", priority=10,
          time_bands="NOTTE", skill_required="GN", days_set="",
@@ -73,11 +74,25 @@ SEED_SHIFT_TYPES = [
          required_by_weekday={d: 1 for d in range(7)}),
     dict(code="GG", name="Guardia Giorno", group="GUARDIA", color="#4f7cff", priority=20,
          time_bands="MATTINA,POMERIGGIO", skill_required="", days_set="",
-         required_by_weekday={d: 1 for d in range(7)},
-         notes="Skill richiesta da confermare"),
+         required_by_weekday={0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 6: 1},
+         notes="Skill richiesta da confermare. Il sabato NON ha GG intera: e' spezzata in GGSABM+GGSABP (vedi ruoli weekend)."),
+    dict(code="GGSABM", name="Guardia Giorno Sab. mattina (8-14)", group="GUARDIA", color="#4f7cff", priority=19,
+         time_bands="MATTINA", skill_required="", days_set="5",
+         required_by_weekday={5: 1}),
+    dict(code="GGSABP", name="Guardia Giorno Sab. pomeriggio (14-20)", group="GUARDIA", color="#4f7cff", priority=19,
+         time_bands="POMERIGGIO", skill_required="", days_set="5",
+         required_by_weekday={5: 1}),
     dict(code="R1G", name="Reperibilità Giorno 1", group="GUARDIA", color="#7c9bff", priority=21,
          time_bands="POMERIGGIO", skill_required="PR", days_set="",
          required_by_weekday={d: 1 for d in range(7)}),
+    dict(code="R2URG", name="Reperibilità Urgenza", group="GUARDIA", color="#7c9bff", priority=22,
+         time_bands="MATTINA,POMERIGGIO", skill_required="", days_set="5,6",
+         is_extra=True,
+         notes="Attivabile su weekend/festivi dalla pagina Extra (non ha un fabbisogno fisso)."),
+    dict(code="PO", name="Preospedalizzazione", group="AMBULATORIO", color="#f2994a", priority=35,
+         time_bands="MATTINA", skill_required="", days_set=",".join(map(str, FERIALI)),
+         required_by_weekday={d: 1 for d in FERIALI},
+         notes="Sospeso in luglio/agosto: usare una soppressione sull'intervallo di date."),
     dict(code="MODA", name="Corsia A", group="CORSIA", color="#1a9c5c", priority=40,
          time_bands="MATTINA,POMERIGGIO", skill_required="", days_set=",".join(map(str, FERIALI)),
          weekly_block=True, block_group="CORSIA"),
@@ -133,12 +148,18 @@ def seed_defaults():
     # Smonto: dopo GN, riposo il giorno dopo; eccezione sab->dom con R2N
     # (stessa logica della regola "GN sabato + R2_N domenica" dello script).
     created["GN"].rest_exception_shift_type_id = created["R2N"].id
-    db.session.add(
-        WeekendPatternRole(role_code="A", day="SAB", shift_type_id=created["GN"].id, skill_required="GN")
-    )
-    db.session.add(
-        WeekendPatternRole(role_code="A", day="DOM", shift_type_id=created["R2N"].id, skill_required="SR")
-    )
+
+    # Pattern weekend reale (confermato dall'utente): il GG del sabato e'
+    # spezzato in due mezze giornate, ciascuna "trascina" una serie di altri
+    # turni nel weekend per la stessa persona.
+    # Ruolo A: chi fa GG sab mattina (8-14) fa anche R1G sab pomeriggio,
+    # GG l'intera domenica, e R1N sia sabato che domenica notte.
+    for day, st_code in [("SAB", "GGSABM"), ("SAB", "R1G"), ("DOM", "GG"), ("SAB", "R1N"), ("DOM", "R1N")]:
+        db.session.add(WeekendPatternRole(role_code="A", day=day, shift_type_id=created[st_code].id))
+
+    # Ruolo B: chi fa GG sab pomeriggio (14-20) fa anche GN la domenica notte.
+    for day, st_code in [("SAB", "GGSABP"), ("DOM", "GN")]:
+        db.session.add(WeekendPatternRole(role_code="B", day=day, shift_type_id=created[st_code].id))
 
     Settings.get()
     db.session.commit()
@@ -469,15 +490,52 @@ def suppressions():
     if request.method == "POST":
         shift_type_id = request.form.get("shift_type_id", type=int)
         day = request.form.get("day", type=int)
+        end_year = request.form.get("end_year", type=int) or year
+        end_month = request.form.get("end_month", type=int) or month
+        end_day = request.form.get("end_day", type=int) or day
+        reason = request.form.get("reason", "").strip() or None
+
         if shift_type_id and day:
-            db.session.add(
-                Suppression(
-                    shift_type_id=shift_type_id, year=year, month=month, day=day,
-                    reason=request.form.get("reason", "").strip() or None,
+            shift_type = ShiftType.query.get(shift_type_id)
+            start_date = date(year, month, day)
+            end_date = date(end_year, end_month, end_day)
+            if end_date < start_date:
+                flash("La data di fine non puo' essere prima della data di inizio.", "warning")
+                return redirect(url_for("main.suppressions", anno=year, mese=month))
+
+            created = 0
+            skipped_not_scheduled = 0
+            current = start_date
+            while current <= end_date:
+                weekday = current.weekday()  # 0=Lun .. 6=Dom, coerente con days_set
+                days_set = shift_type.days_set_list()
+                normally_scheduled = (not days_set or weekday in days_set) and (
+                    shift_type.requirement_for_weekday(weekday) > 0 or shift_type.is_extra
                 )
-            )
+                if normally_scheduled:
+                    exists = Suppression.query.filter_by(
+                        shift_type_id=shift_type_id, year=current.year, month=current.month, day=current.day
+                    ).first()
+                    if not exists:
+                        db.session.add(
+                            Suppression(
+                                shift_type_id=shift_type_id, year=current.year, month=current.month,
+                                day=current.day, reason=reason,
+                            )
+                        )
+                        created += 1
+                else:
+                    skipped_not_scheduled += 1
+                current += timedelta(days=1)
+
             db.session.commit()
-            flash("Soppressione aggiunta.", "success")
+            if created:
+                msg = f"{created} soppressione/i aggiunta/e."
+                if skipped_not_scheduled:
+                    msg += f" ({skipped_not_scheduled} giorni ignorati perche' il turno non era comunque previsto.)"
+                flash(msg, "success")
+            else:
+                flash("Nessuna soppressione aggiunta: il turno non era previsto in nessuno dei giorni scelti.", "warning")
         return redirect(url_for("main.suppressions", anno=year, mese=month))
 
     items = Suppression.query.filter_by(year=year, month=month).order_by(Suppression.day).all()

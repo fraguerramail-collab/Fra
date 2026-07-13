@@ -2,7 +2,7 @@
 {% block title %}Soppressioni - Gestione Turni{% endblock %}
 {% block content %}
 <h1>Soppressioni</h1>
-<p>Sopprime un turno obbligatorio in una data specifica (es. attività sospesa): non verrà segnalato come scoperto in fase di generazione.</p>
+<p>Sopprime un turno obbligatorio in una data (o in un intervallo di date, es. un servizio fermo per due mesi): non verrà segnalato come scoperto in fase di generazione. Nell'intervallo vengono create soppressioni solo nei giorni in cui il turno sarebbe comunque previsto.</p>
 
 <form method="get" action="{{ url_for('main.suppressions') }}" class="toolbar">
   <label>Mese
@@ -25,13 +25,30 @@
       </select>
     </label>
     &nbsp;
-    <label>Giorno<br>
+    <label>Dal giorno<br>
       <select name="day">
         {% for d in day_range %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
       </select>
     </label>
     &nbsp;
-    <label>Motivo<br><input type="text" name="reason"></label>
+    <label>Al giorno (facoltativo, per un intervallo)<br>
+      <select name="end_day">
+        <option value="">stesso giorno</option>
+        {% for d in day_range %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+      </select>
+    </label>
+    &nbsp;
+    <label>Mese fine (se l'intervallo supera {{ month_name }})<br>
+      <select name="end_month">
+        {% for i in range(1, 13) %}
+        <option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ month_names[i] }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    &nbsp;
+    <label>Anno fine<br><input type="number" name="end_year" value="{{ year }}" style="width:6rem"></label>
+    &nbsp;
+    <label>Motivo<br><input type="text" name="reason" placeholder="es. servizio sospeso"></label>
     &nbsp;
     <button type="submit">Aggiungi</button>
   </form>
