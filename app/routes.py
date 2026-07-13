@@ -18,6 +18,7 @@ from .models import (
     Settings,
     ShiftRequirement,
     ShiftType,
+    SkillRule,
     Suppression,
     TIME_BANDS,
     WEEKDAY_NAMES,
@@ -29,6 +30,7 @@ from .scheduler import (
     EmployeeInput,
     PreferenceInput,
     ShiftTypeInput,
+    SkillRuleInput,
     WeekendRoleInput,
     generate_schedule,
 )
@@ -104,7 +106,8 @@ SEED_SHIFT_TYPES = [
          weekly_block=True, block_group="CORSIA"),
     dict(code="BREAST", name="Ambulatorio Breast", group="CORSIA", color="#e05780", priority=30,
          time_bands="MATTINA", skill_required="BREAST", days_set="0,2",
-         required_by_weekday={0: 1, 2: 1}),
+         notes="Non richiede assegnazione tramite l'app: chi ha skill BREAST e' protetto da altri "
+               "turni lun/mer e riservato (almeno 1 libero) mar/gio/ven, vedi Regole > regole skill."),
     dict(code="MEDIC", name="Ambulatorio Medicazioni", group="AMBULATORIO", color="#f2994a", priority=55,
          time_bands="MATTINA", skill_required="MED", days_set="0,2,4",
          required_by_weekday={0: 1, 2: 1, 4: 1}),
@@ -178,6 +181,13 @@ def load_example_catalog():
                     role_code=role_code, day=day, shift_type_id=created[st_code].id, skill_required=skill,
                 )
             )
+
+    # Chi ha skill BREAST: bloccato da ogni altro turno lun/mer (dedicato
+    # all'ambulatorio Breast), riservato (almeno 1 libero) mar/gio/ven.
+    for weekday in (0, 2):
+        db.session.add(SkillRule(skill="BREAST", weekday=weekday, mode="BLOCK"))
+    for weekday in (1, 3, 4):
+        db.session.add(SkillRule(skill="BREAST", weekday=weekday, mode="RESERVE", min_free=1))
 
     Settings.get()
     db.session.commit()
@@ -466,7 +476,30 @@ def rules():
         db.session.commit()
         flash("Regole salvate.", "success")
         return redirect(url_for("main.rules"))
-    return render_template("rules.html", settings=settings)
+    skill_rules = SkillRule.query.order_by(SkillRule.skill, SkillRule.weekday).all()
+    return render_template("rules.html", settings=settings, skill_rules=skill_rules, weekday_names=WEEKDAY_NAMES)
+
+
+@bp.route("/regole/skill", methods=["POST"])
+def add_skill_rule():
+    skill = request.form.get("skill", "").strip()
+    weekday = request.form.get("weekday", type=int)
+    mode = request.form.get("mode", "").strip()
+    min_free = request.form.get("min_free", type=int) or 1
+    if skill and weekday is not None and mode in ("BLOCK", "RESERVE"):
+        db.session.add(SkillRule(skill=skill, weekday=weekday, mode=mode, min_free=min_free))
+        db.session.commit()
+        flash("Regola skill aggiunta.", "success")
+    return redirect(url_for("main.rules"))
+
+
+@bp.route("/regole/skill/<int:rule_id>/elimina", methods=["POST"])
+def delete_skill_rule(rule_id):
+    rule = SkillRule.query.get_or_404(rule_id)
+    db.session.delete(rule)
+    db.session.commit()
+    flash("Regola skill eliminata.", "success")
+    return redirect(url_for("main.rules"))
 
 
 # ---------------------------------------------------------------- disponibilità
@@ -710,6 +743,11 @@ def generate():
         for a in prev_weekend_assignments:
             prev_month_weekend_count[a.employee_id] = 1
 
+    skill_rule_inputs = [
+        SkillRuleInput(skill=r.skill, weekday=r.weekday, mode=r.mode, min_free=r.min_free)
+        for r in SkillRule.query.all()
+    ]
+
     result = generate_schedule(
         year=year, month=month, employees=employee_inputs,
         shift_types=list(shift_type_inputs_by_id.values()), weekend_roles=weekend_role_inputs,
@@ -717,6 +755,7 @@ def generate():
         extra_activations=extra_activations, prev_month_last_shifts=prev_month_last_shifts,
         prev_month_weekend_count=prev_month_weekend_count,
         max_consecutive_work_days=settings.max_consecutive_work_days,
+        skill_rules=skill_rule_inputs,
     )
 
     Assignment.query.filter_by(year=year, month=month, auto_generated=True).delete()

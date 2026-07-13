@@ -12,4 +12,51 @@
     <button type="submit">Salva</button>
   </form>
 </div>
+
+<div class="card">
+  <h2>Regole legate a una skill (non a un turno)</h2>
+  <p><small>
+    <strong>Blocca</strong>: chi ha questa skill non viene messo di turno su NESSUN turno in questo
+    giorno della settimana (es. impegnato in un'attività fuori app, come l'ambulatorio Breast).<br>
+    <strong>Riserva</strong>: tra chi ha questa skill, almeno N persone restano libere (non assegnate a
+    nulla) in questo giorno della settimana.
+  </small></p>
+
+  <form method="post" action="{{ url_for('main.add_skill_rule') }}">
+    <label>Skill <input type="text" name="skill" placeholder="es. BREAST" required style="width:8rem"></label>
+    <label>Giorno
+      <select name="weekday">
+        {% for wd in range(7) %}<option value="{{ wd }}">{{ weekday_names[wd] }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Regola
+      <select name="mode">
+        <option value="BLOCK">Blocca (nessun turno)</option>
+        <option value="RESERVE">Riserva (almeno N liberi)</option>
+      </select>
+    </label>
+    <label>N minimo liberi (solo per Riserva) <input type="number" name="min_free" min="1" value="1" style="width:4rem"></label>
+    <button type="submit">Aggiungi</button>
+  </form>
+
+  <table style="margin-top:1rem; max-width:600px">
+    <thead><tr><th>Skill</th><th>Giorno</th><th>Regola</th><th></th></tr></thead>
+    <tbody>
+      {% for r in skill_rules %}
+      <tr>
+        <td>{{ r.skill }}</td>
+        <td>{{ weekday_names[r.weekday] }}</td>
+        <td>{% if r.mode == 'BLOCK' %}Blocca{% else %}Riserva almeno {{ r.min_free }} liberi{% endif %}</td>
+        <td>
+          <form class="inline" method="post" action="{{ url_for('main.delete_skill_rule', rule_id=r.id) }}">
+            <button type="submit" class="danger">Elimina</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">Nessuna regola skill definita.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endblock %}

@@ -4,6 +4,7 @@ from app.scheduler import (
     EmployeeInput,
     PreferenceInput,
     ShiftTypeInput,
+    SkillRuleInput,
     WeekendRoleInput,
     generate_schedule,
 )
@@ -244,3 +245,34 @@ def test_preference_max_mese_is_soft_not_hard():
 
     # unico candidato disponibile: la regola MAX_MESE penalizza ma non blocca
     assert len(result.assignments) == 31
+
+
+def test_skill_rule_block_excludes_from_every_shift_that_weekday():
+    # 2026-01-05 e' lunedi'. Chi ha skill BREAST non deve comparire in
+    # NESSUN turno di lunedi', anche se qualificato e disponibile.
+    breast_holder = emp(1, "Breast1", skills={"BREAST", "X"})
+    other = emp(2, "Altro", skills={"X"})
+    shift_types = [shift(1, "Turno", skill_required="X")]
+    skill_rules = [SkillRuleInput(skill="BREAST", weekday=0, mode="BLOCK")]
+
+    result = run(employees=[breast_holder, other], shift_types=shift_types, skill_rules=skill_rules)
+
+    monday_assignees = {a["employee_id"] for a in result.assignments if a["day"] == 5}
+    assert 1 not in monday_assignees
+    assert 2 in monday_assignees
+
+
+def test_skill_rule_reserve_keeps_at_least_one_free():
+    # 3 persone con skill BREAST; almeno 1 deve restare libera ogni martedi'.
+    employees = [emp(i, f"B{i}", skills={"BREAST"}) for i in (1, 2, 3)]
+    shift_types = [shift(1, "Turno", skill_required="BREAST", requirements_by_weekday={wd: 3 for wd in range(7)})]
+    skill_rules = [SkillRuleInput(skill="BREAST", weekday=1, mode="RESERVE", min_free=1)]
+
+    result = run(employees=employees, shift_types=shift_types, skill_rules=skill_rules)
+
+    # 2026-01-06 e' martedi'
+    tuesday_assignees = {a["employee_id"] for a in result.assignments if a["day"] == 6}
+    assert len(tuesday_assignees) <= 2
+    assert any(
+        "candidati" in w or "coperto" in w for w in result.warnings
+    )  # il fabbisogno di 3 non e' piu' copribile con la riserva attiva

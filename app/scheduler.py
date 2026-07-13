@@ -72,6 +72,22 @@ class PreferenceInput:
 
 
 @dataclass
+class SkillRuleInput:
+    """Regola trasversale legata a una skill, non a un turno specifico.
+
+    BLOCK: chi ha questa skill non puo' essere assegnato a NESSUN turno in
+    questo giorno della settimana (es. dedicato ad attivita' fuori app).
+    RESERVE: tra chi ha questa skill, almeno 'min_free' devono restare
+    liberi (non assegnati a nulla) in questo giorno della settimana.
+    """
+
+    skill: str
+    weekday: int  # 0=Lunedì .. 6=Domenica
+    mode: str  # "BLOCK" o "RESERVE"
+    min_free: int = 1
+
+
+@dataclass
 class ScheduleResult:
     assignments: list  # dict {employee_id, shift_type_id, day}
     warnings: list
@@ -151,6 +167,26 @@ def _fairness_score(employee, shift_type, state):
     return score
 
 
+def _skill_blocked(employee, weekday, block_set):
+    return any((skill, weekday) in block_set for skill in employee.skills)
+
+
+def _skill_reserve_violated(employee, day, weekday, reserve_rules, employees, state):
+    for rule in reserve_rules:
+        if rule.weekday != weekday or rule.skill not in employee.skills:
+            continue
+        pool = [e for e in employees if rule.skill in e.skills]
+        if len(pool) <= rule.min_free:
+            # Non c'e' abbastanza personale con questa skill per rispettare la riserva:
+            # si procede comunque, altrimenti nessuno con questa skill potrebbe mai
+            # essere assegnato in questo giorno della settimana.
+            continue
+        assigned_count = sum(1 for e in pool if state.assigned_day[e.id].get(day))
+        if assigned_count >= len(pool) - rule.min_free:
+            return True
+    return False
+
+
 def _day_has_exclusive_conflict(state, employee_id, day, shift_types_by_id, new_shift):
     existing_ids = state.assigned_day[employee_id].get(day, [])
     if not existing_ids:
@@ -211,9 +247,13 @@ def generate_schedule(
     prev_month_last_shifts=None,  # dict employee_id -> [shift_type_id,...] assegnati l'ultimo giorno del mese precedente
     prev_month_weekend_count=None,  # dict employee_id -> weekend lavorati nell'ultimo weekend del mese precedente (bool-like int)
     max_consecutive_work_days=6,
+    skill_rules=None,  # lista di SkillRuleInput
 ):
     prev_month_last_shifts = prev_month_last_shifts or {}
     prev_month_weekend_count = prev_month_weekend_count or {}
+    skill_rules = skill_rules or []
+    skill_block_set = {(r.skill, r.weekday) for r in skill_rules if r.mode == "BLOCK"}
+    skill_reserve_rules = [r for r in skill_rules if r.mode == "RESERVE"]
 
     first_weekday, num_days = monthrange(year, month)
     shift_types_by_id = {st.id: st for st in shift_types}
@@ -253,6 +293,10 @@ def generate_schedule(
             if emp.category in shift_type.excluded_categories:
                 continue
             if not is_available(emp.id, day, shift_type):
+                continue
+            if _skill_blocked(emp, weekday, skill_block_set):
+                continue
+            if _skill_reserve_violated(emp, day, weekday, skill_reserve_rules, employees, state):
                 continue
             if _day_has_exclusive_conflict(state, emp.id, day, shift_types_by_id, shift_type):
                 continue
