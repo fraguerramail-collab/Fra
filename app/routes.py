@@ -64,7 +64,8 @@ FERIALI = {0, 1, 2, 3, 4}
 SEED_SHIFT_TYPES = [
     dict(code="GN", name="Guardia Notte", group="NOTTE", color="#7c5cbf", priority=10,
          time_bands="NOTTE", skill_required="GN", days_set="",
-         exclusive_day=True, requires_rest_next_day=True, min_gap_days=2,
+         requires_rest_next_day=True, min_gap_days=2,
+         notes="Non esclusivo: nel weekend (ruolo B) coesiste con R2_URG lo stesso giorno.",
          required_by_weekday={d: 1 for d in range(7)}),
     dict(code="R1N", name="Reperibilità Notte 1", group="NOTTE", color="#9b8ad6", priority=11,
          time_bands="NOTTE", skill_required="PR", days_set="",
@@ -73,22 +74,24 @@ SEED_SHIFT_TYPES = [
          time_bands="NOTTE", skill_required="SR", days_set="",
          required_by_weekday={d: 1 for d in range(7)}),
     dict(code="GG", name="Guardia Giorno", group="GUARDIA", color="#4f7cff", priority=20,
-         time_bands="MATTINA,POMERIGGIO", skill_required="", days_set="",
+         time_bands="MATTINA,POMERIGGIO", skill_required="GG", days_set="",
          required_by_weekday={0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 6: 1},
-         notes="Skill richiesta da confermare. Il sabato NON ha GG intera: e' spezzata in GGSABM+GGSABP (vedi ruoli weekend)."),
-    dict(code="GGSABM", name="Guardia Giorno Sab. mattina (8-14)", group="GUARDIA", color="#4f7cff", priority=19,
-         time_bands="MATTINA", skill_required="", days_set="5",
+         notes="Il sabato NON ha GG intera: e' spezzata in GG_AM+GG_PM (vedi ruoli weekend)."),
+    dict(code="GG_AM", name="Guardia Giorno Sab. mattina (8-14)", group="GUARDIA", color="#4f7cff", priority=19,
+         time_bands="MATTINA", skill_required="PR", days_set="5",
          required_by_weekday={5: 1}),
-    dict(code="GGSABP", name="Guardia Giorno Sab. pomeriggio (14-20)", group="GUARDIA", color="#4f7cff", priority=19,
-         time_bands="POMERIGGIO", skill_required="", days_set="5",
+    dict(code="GG_PM", name="Guardia Giorno Sab. pomeriggio (14-20)", group="GUARDIA", color="#4f7cff", priority=19,
+         time_bands="POMERIGGIO", skill_required="PR|SR", days_set="5",
          required_by_weekday={5: 1}),
     dict(code="R1G", name="Reperibilità Giorno 1", group="GUARDIA", color="#7c9bff", priority=21,
          time_bands="POMERIGGIO", skill_required="PR", days_set="",
          required_by_weekday={d: 1 for d in range(7)}),
     dict(code="R2URG", name="Reperibilità Urgenza", group="GUARDIA", color="#7c9bff", priority=22,
-         time_bands="MATTINA,POMERIGGIO", skill_required="", days_set="5,6",
+         time_bands="MATTINA,POMERIGGIO", skill_required="PR|SR", days_set="5,6",
          is_extra=True,
-         notes="Attivabile su weekend/festivi dalla pagina Extra (non ha un fabbisogno fisso)."),
+         notes="Coperta ogni weekend dai ruoli A-D. Per un festivo infrasettimanale (es. 10 agosto), "
+               "attivala dalla pagina Extra sulla data specifica: essendo un turno extra funziona su "
+               "qualsiasi giorno, non solo sab/dom."),
     dict(code="PO", name="Preospedalizzazione", group="AMBULATORIO", color="#f2994a", priority=35,
          time_bands="MATTINA", skill_required="", days_set=",".join(map(str, FERIALI)),
          required_by_weekday={d: 1 for d in FERIALI},
@@ -149,17 +152,24 @@ def seed_defaults():
     # (stessa logica della regola "GN sabato + R2_N domenica" dello script).
     created["GN"].rest_exception_shift_type_id = created["R2N"].id
 
-    # Pattern weekend reale (confermato dall'utente): il GG del sabato e'
-    # spezzato in due mezze giornate, ciascuna "trascina" una serie di altri
-    # turni nel weekend per la stessa persona.
-    # Ruolo A: chi fa GG sab mattina (8-14) fa anche R1G sab pomeriggio,
-    # GG l'intera domenica, e R1N sia sabato che domenica notte.
-    for day, st_code in [("SAB", "GGSABM"), ("SAB", "R1G"), ("DOM", "GG"), ("SAB", "R1N"), ("DOM", "R1N")]:
-        db.session.add(WeekendPatternRole(role_code="A", day=day, shift_type_id=created[st_code].id))
-
-    # Ruolo B: chi fa GG sab pomeriggio (14-20) fa anche GN la domenica notte.
-    for day, st_code in [("SAB", "GGSABP"), ("DOM", "GN")]:
-        db.session.add(WeekendPatternRole(role_code="B", day=day, shift_type_id=created[st_code].id))
+    # Pattern weekend reale, dal foglio "Pattern_Weekend" del reparto (4 figure
+    # A/B/C/D) e verificato riga per riga sul turnario di luglio 2026 reale.
+    # Ogni riga: (giorno, codice turno, skill richiesta per QUEL ruolo).
+    WEEKEND_PATTERN = {
+        "A": [("SAB", "GG_AM", "PR"), ("SAB", "R1G", "PR"), ("SAB", "R1N", "PR"),
+              ("DOM", "R1G", "PR"), ("DOM", "R1N", "PR")],
+        "B": [("SAB", "GG_PM", "PR|SR"), ("SAB", "R2N", "PR|SR"),
+              ("DOM", "R2URG", "PR|SR"), ("DOM", "GN", "PR|SR")],
+        "C": [("SAB", "R2URG", "GG"), ("DOM", "GG", "GG")],
+        "D": [("SAB", "GN", "PR|SR"), ("DOM", "R2N", "PR|SR")],
+    }
+    for role_code, entries in WEEKEND_PATTERN.items():
+        for day, st_code, skill in entries:
+            db.session.add(
+                WeekendPatternRole(
+                    role_code=role_code, day=day, shift_type_id=created[st_code].id, skill_required=skill,
+                )
+            )
 
     Settings.get()
     db.session.commit()

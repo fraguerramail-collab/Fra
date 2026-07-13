@@ -327,7 +327,18 @@ def generate_schedule(
                 day = sab_day if r.day == "SAB" else dom_day
                 weekday = weekday_of(day)
                 shift_type = shift_types_by_id[r.shift_type_id]
-                try_assign(chosen, shift_type, day, weekday)
+                ok = try_assign(chosen, shift_type, day, weekday)
+                if not ok:
+                    # I candidati erano stati filtrati PRIMA di iniziare ad assegnare
+                    # questo ruolo: se qui l'assegnazione fallisce comunque, e' un
+                    # conflitto interno al ruolo stesso (es. due turni del ruolo che
+                    # si escludono a vicenda) e va segnalato, non ignorato in silenzio.
+                    warnings.append(
+                        f"Weekend {sab_day}-{dom_day or sab_day}: ruolo {role_code}, turno '{shift_type.name}' "
+                        f"non assegnato a {chosen.name} per un conflitto con un altro turno dello stesso ruolo "
+                        f"(controlla la configurazione dei turni: es. 'esclusivo' incompatibile con un altro "
+                        f"turno dello stesso weekend)."
+                    )
 
     # --- Pass 2: turni a blocco settimanale (es. corsia) ---
     weekly_types = [st for st in shift_types if st.weekly_block]

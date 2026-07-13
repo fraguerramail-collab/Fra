@@ -101,6 +101,48 @@ def test_requires_rest_next_day_exception_saturday_sunday():
     assert (2, 4) in assignments_by_shift_day
 
 
+def test_weekend_role_same_day_shifts_both_assigned_when_not_exclusive():
+    # Un ruolo puo' legittimamente assegnare due turni diversi lo stesso
+    # giorno alla stessa persona (es. Guardia Notte + Reperibilita Urgenza
+    # la domenica), purche' nessuno dei due sia "esclusivo".
+    employees = [emp(1, "A", skills={"X"})]
+    night = shift(1, "Notte", skill_required="X", priority=1, requirements_by_weekday={})
+    urgenza = shift(2, "Urgenza", skill_required="X", priority=2, requirements_by_weekday={})
+
+    weekend_roles = [
+        WeekendRoleInput(role_code="B", day="DOM", shift_type_id=1, skill_required="X"),
+        WeekendRoleInput(role_code="B", day="DOM", shift_type_id=2, skill_required="X"),
+    ]
+
+    result = run(employees=employees, shift_types=[night, urgenza], weekend_roles=weekend_roles)
+
+    assignments_by_shift_day = {(a["shift_type_id"], a["day"]) for a in result.assignments}
+    assert (1, 4) in assignments_by_shift_day
+    assert (2, 4) in assignments_by_shift_day
+    assert not result.warnings
+
+
+def test_weekend_role_internal_conflict_warns_instead_of_silently_dropping():
+    # Se un ruolo unisce due turni incompatibili lo stesso giorno (uno
+    # "esclusivo"), il secondo non puo' essere assegnato: deve comparire un
+    # avviso esplicito invece di sparire senza spiegazione.
+    employees = [emp(1, "A", skills={"X"})]
+    night = shift(1, "Notte", skill_required="X", exclusive_day=True, priority=1, requirements_by_weekday={})
+    urgenza = shift(2, "Urgenza", skill_required="X", priority=2, requirements_by_weekday={})
+
+    weekend_roles = [
+        WeekendRoleInput(role_code="B", day="DOM", shift_type_id=1, skill_required="X"),
+        WeekendRoleInput(role_code="B", day="DOM", shift_type_id=2, skill_required="X"),
+    ]
+
+    result = run(employees=employees, shift_types=[night, urgenza], weekend_roles=weekend_roles)
+
+    assignments_by_shift_day = {(a["shift_type_id"], a["day"]) for a in result.assignments}
+    assert (1, 4) in assignments_by_shift_day
+    assert (2, 4) not in assignments_by_shift_day
+    assert any("conflitto" in w for w in result.warnings)
+
+
 def test_weekend_role_only_blocks_its_own_day_not_the_whole_weekend():
     # GN e' nel ruolo weekend solo di sabato, "Reperibilita" solo di domenica:
     # GN deve restare assegnabile ordinariamente la domenica, e "Reperibilita"
