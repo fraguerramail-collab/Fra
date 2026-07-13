@@ -1,9 +1,13 @@
 """Motore di generazione automatica dei turni.
 
 Indipendente dal database: lavora su dataclass semplici cosi' e' facile
-da testare. Riproduce in forma generalizzata (configurabile per qualsiasi
-codice turno, non hardcoded) le regole tipiche di una pianificazione
-ospedaliera complessa:
+da testare. Usa un risolutore a vincoli (Google OR-Tools CP-SAT) che
+valuta l'intero mese in un colpo solo, invece di riempire i turni uno
+alla volta in ordine di priorita': evita l'effetto "imbuto" per cui le
+prime assegnazioni restringono progressivamente le possibilita' di
+quelle successive, specialmente nei mesi con molte assenze.
+
+Regole modellate come vincoli:
 
 - fasce orarie e compatibilita' tra turni nello stesso giorno
 - turno "esclusivo" (nessun altro turno lo stesso giorno, es. notte)
@@ -13,16 +17,31 @@ ospedaliera complessa:
 - turni "a blocco settimanale" (assegnati per l'intera settimana, es. corsia)
 - turni weekend a ruoli (stesso medico copre piu' turni nel weekend)
 - skill richieste (con OR tramite 'A|B') e categorie escluse
-- preferenze pesate (EVITA / PREFERISCI / RISERVA / MAX_MESE)
+- regole legate a una skill (blocco/riserva), non a un turno specifico
 - turni extra attivabili su date specifiche con pool di equita' separato
 - continuita' con il mese precedente (smonto, weekend) tramite storico assegnazioni
+
+L'obiettivo del risolutore, in ordine di importanza: (1) minimizzare le
+scoperture (coprire quanto piu' possibile), (2) equita' del carico totale
+tra i dipendenti, (3) equita' dei weekend lavorati, (4) preferenze pesate.
 """
 
 from calendar import monthrange
 from dataclasses import dataclass, field
 
+from ortools.sat.python import cp_model
+
 WEEKDAY_NAMES = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 SATURDAY, SUNDAY = 5, 6
+
+# Peso della penalita' per ogni "unita'" di scopertura (turno non coperto,
+# ruolo weekend o blocco settimanale non assegnato): domina su tutto il
+# resto, il risolutore sacrifica equita'/preferenze pur di coprire di piu'.
+SHORTFALL_PENALTY = 1_000_000
+WEEKEND_FAIRNESS_WEIGHT = 200
+FAIRNESS_WEIGHT = 50
+MAX_MESE_PENALTY = 5_000
+SOLVER_TIME_LIMIT_SECONDS = 30
 
 
 @dataclass
@@ -110,128 +129,23 @@ def _bands_compatible(full_block, blocked_bands, shift_bands):
     return not (blocked_bands & shift_bands)
 
 
-class _MonthState:
-    """Stato mutabile durante la generazione di un mese."""
-
-    def __init__(self, employees):
-        self.total = {e.id: 0 for e in employees}
-        self.per_shift_type = {e.id: {} for e in employees}
-        self.per_pool = {e.id: {} for e in employees}
-        self.per_block_group_weeks = {e.id: set() for e in employees}
-        self.assigned_day = {e.id: {} for e in employees}  # day -> shift_type_id list
-        self.weekend_keys = {e.id: set() for e in employees}
-
-    def record(self, employee_id, shift_type, day):
-        self.total[employee_id] += 1
-        self.per_shift_type[employee_id][shift_type.id] = (
-            self.per_shift_type[employee_id].get(shift_type.id, 0) + 1
-        )
-        if shift_type.balance_pool:
-            self.per_pool[employee_id][shift_type.balance_pool] = (
-                self.per_pool[employee_id].get(shift_type.balance_pool, 0) + 1
-            )
-        self.assigned_day[employee_id].setdefault(day, []).append(shift_type.id)
+def _shift_type_conflicts(shift_types):
+    """Coppie di turni incompatibili lo stesso giorno per la stessa persona:
+    uno dei due e' 'esclusivo', oppure le fasce orarie si sovrappongono."""
+    conflicts = set()
+    sts = list(shift_types)
+    for i in range(len(sts)):
+        for j in range(i + 1, len(sts)):
+            a, b = sts[i], sts[j]
+            if a.exclusive_day or b.exclusive_day or (a.time_bands & b.time_bands):
+                conflicts.add((a.id, b.id))
+    return conflicts
 
 
-def _preference_score(employee, shift_type, day, weekday, preferences, state):
-    score = 0
-    for p in preferences:
-        if p.employee_id is not None and p.employee_id != employee.id:
-            continue
-        if p.shift_type_id is not None and p.shift_type_id != shift_type.id:
-            continue
-        if p.days_set and weekday not in p.days_set:
-            continue
-        if p.pref_type == "EVITA":
-            score += p.weight
-        elif p.pref_type == "PREFERISCI":
-            score -= p.weight
-        elif p.pref_type == "RISERVA":
-            score += p.weight * 500
-        elif p.pref_type == "MAX_MESE":
-            already = state.per_shift_type[employee.id].get(shift_type.id, 0)
-            if p.weight > 0 and already >= p.weight:
-                score += 50000 + (already - p.weight + 1) ** 2 * 20000
-    return score
-
-
-def _fairness_score(employee, shift_type, state):
-    total = state.total[employee.id]
-    same = state.per_shift_type[employee.id].get(shift_type.id, 0)
-    score = total * 90 + same * 250
-    if total > 10:
-        score += (total - 10) ** 2 * 350
-    if shift_type.balance_pool:
-        pool_count = state.per_pool[employee.id].get(shift_type.balance_pool, 0)
-        score += pool_count * 3000
-    return score
-
-
-def _skill_blocked(employee, weekday, block_set):
-    return any((skill, weekday) in block_set for skill in employee.skills)
-
-
-def _skill_reserve_violated(employee, day, weekday, reserve_rules, employees, state):
-    for rule in reserve_rules:
-        if rule.weekday != weekday or rule.skill not in employee.skills:
-            continue
-        pool = [e for e in employees if rule.skill in e.skills]
-        if len(pool) <= rule.min_free:
-            # Non c'e' abbastanza personale con questa skill per rispettare la riserva:
-            # si procede comunque, altrimenti nessuno con questa skill potrebbe mai
-            # essere assegnato in questo giorno della settimana.
-            continue
-        assigned_count = sum(1 for e in pool if state.assigned_day[e.id].get(day))
-        if assigned_count >= len(pool) - rule.min_free:
-            return True
-    return False
-
-
-def _day_has_exclusive_conflict(state, employee_id, day, shift_types_by_id, new_shift):
-    existing_ids = state.assigned_day[employee_id].get(day, [])
-    if not existing_ids:
-        return False
-    if new_shift.exclusive_day:
-        return True
-    for sid in existing_ids:
-        st = shift_types_by_id[sid]
-        if st.exclusive_day:
-            return True
-        if st.time_bands & new_shift.time_bands:
-            return True
-    return False
-
-
-def _min_gap_violated(state, employee_id, shift_type, day):
-    if shift_type.min_gap_days <= 0:
-        return False
-    for other_day, shift_ids in state.assigned_day[employee_id].items():
-        if shift_type.id in shift_ids and abs(other_day - day) <= shift_type.min_gap_days:
-            return True
-    return False
-
-
-def _rest_violation(state, employee_id, shift_type, day, shift_types_by_id, weekday, prev_month_last_shifts):
-    """Controlla se ieri il dipendente ha fatto un turno con requires_rest_next_day."""
-    if day == 1:
-        yesterday_shifts = prev_month_last_shifts.get(employee_id, [])
-        yesterday_weekday = (weekday - 1) % 7
-    else:
-        yesterday_shifts = state.assigned_day[employee_id].get(day - 1, [])
-        yesterday_weekday = (weekday - 1) % 7
-
-    for sid in yesterday_shifts:
-        prev_shift = shift_types_by_id.get(sid)
-        if prev_shift is None or not prev_shift.requires_rest_next_day:
-            continue
-        exception_ok = (
-            prev_shift.rest_exception_shift_type_id == shift_type.id
-            and yesterday_weekday == SATURDAY
-            and weekday == SUNDAY
-        )
-        if not exception_ok:
-            return True
-    return False
+def _prev_month_last_weekday(year, month):
+    py, pm = (year, month - 1) if month > 1 else (year - 1, 12)
+    first_weekday, num_days = monthrange(py, pm)
+    return (first_weekday + num_days - 1) % 7
 
 
 def generate_schedule(
@@ -258,8 +172,6 @@ def generate_schedule(
     first_weekday, num_days = monthrange(year, month)
     shift_types_by_id = {st.id: st for st in shift_types}
     warnings = []
-    assignments = []
-    state = _MonthState(employees)
 
     def weekday_of(day):
         return (day - 1 + first_weekday) % 7
@@ -274,43 +186,35 @@ def generate_schedule(
     def is_suppressed(shift_type_id, day):
         return (shift_type_id, day) in suppressions
 
-    def try_assign(employee, shift_type, day, weekday):
-        if _day_has_exclusive_conflict(state, employee.id, day, shift_types_by_id, shift_type):
+    def eligible(emp, shift_type, day, weekday, skill_formula=None):
+        if not _has_skill(emp, skill_formula if skill_formula is not None else shift_type.skill_required):
             return False
-        if _min_gap_violated(state, employee.id, shift_type, day):
+        if emp.category in shift_type.excluded_categories:
             return False
-        if _rest_violation(state, employee.id, shift_type, day, shift_types_by_id, weekday, prev_month_last_shifts):
+        if not is_available(emp.id, day, shift_type):
             return False
-        state.record(employee.id, shift_type, day)
-        assignments.append({"employee_id": employee.id, "shift_type_id": shift_type.id, "day": day})
+        if any((skill, weekday) in skill_block_set for skill in emp.skills):
+            return False
         return True
 
-    def candidates_for(shift_type, day, weekday, skill_formula=None):
-        result = []
-        for emp in employees:
-            if not _has_skill(emp, skill_formula if skill_formula is not None else shift_type.skill_required):
-                continue
-            if emp.category in shift_type.excluded_categories:
-                continue
-            if not is_available(emp.id, day, shift_type):
-                continue
-            if _skill_blocked(emp, weekday, skill_block_set):
-                continue
-            if _skill_reserve_violated(emp, day, weekday, skill_reserve_rules, employees, state):
-                continue
-            if _day_has_exclusive_conflict(state, emp.id, day, shift_types_by_id, shift_type):
-                continue
-            if _min_gap_violated(state, emp.id, shift_type, day):
-                continue
-            if _rest_violation(state, emp.id, shift_type, day, shift_types_by_id, weekday, prev_month_last_shifts):
-                continue
-            result.append(emp)
-        return result
+    model = cp_model.CpModel()
+    x = {}  # (employee_id, shift_type_id, day) -> BoolVar
+    objective_terms = []
+    weekend_role_vars_by_employee = {e.id: [] for e in employees}
 
-    # --- Pass 1: weekend a ruoli (stesso medico copre tutti i turni del proprio ruolo nel weekend) ---
-    # Un turno e' "coperto dal weekend" solo nel giorno specifico (SAB o DOM) in cui
-    # compare in un ruolo: es. GN il sabato e R2N la domenica sono due turni diversi,
-    # e ciascuno resta soggetto al fabbisogno ordinario nell'altro giorno del weekend.
+    def get_x(emp_id, st_id, day):
+        return x.get((emp_id, st_id, day))
+
+    def new_x(emp, st_id, day):
+        var = model.NewBoolVar(f"x_e{emp.id}_s{st_id}_d{day}")
+        x[(emp.id, st_id, day)] = var
+        return var
+
+    # ---------------------------------------------------------- ruoli weekend
+    # Un turno e' "coperto dal weekend" solo nel giorno specifico (SAB o DOM)
+    # in cui compare in un ruolo: es. GN il sabato e R2N la domenica sono due
+    # turni diversi, e ciascuno resta soggetto al fabbisogno ordinario
+    # nell'altro giorno del weekend.
     weekend_controlled_day = {(r.shift_type_id, r.day) for r in weekend_roles}
     weekends = []
     d = 1
@@ -324,121 +228,102 @@ def generate_schedule(
     for r in weekend_roles:
         roles_by_code.setdefault(r.role_code, []).append(r)
 
+    role_slots = []  # (role_code, sab_day, dom_day, role_vars)
     for sab_day, dom_day in weekends:
-        role_days = [(sab_day, "SAB")]
-        if dom_day:
-            role_days.append((dom_day, "DOM"))
-
-        used_this_weekend = set()
         for role_code, role_entries in sorted(roles_by_code.items()):
             applicable = [r for r in role_entries if (r.day == "SAB") or (r.day == "DOM" and dom_day)]
             if not applicable:
                 continue
 
-            candidates = None
+            entries = []  # (shift_type, day, weekday, skill_formula)
             for r in applicable:
-                day = sab_day if r.day == "SAB" else dom_day
-                weekday = weekday_of(day)
+                day_ = sab_day if r.day == "SAB" else dom_day
+                weekday_ = weekday_of(day_)
                 shift_type = shift_types_by_id[r.shift_type_id]
                 skill_formula = r.skill_required or shift_type.skill_required
-                day_candidates = set(c.id for c in candidates_for(shift_type, day, weekday, skill_formula))
-                candidates = day_candidates if candidates is None else (candidates & day_candidates)
+                entries.append((shift_type, day_, weekday_, skill_formula))
 
-            if not candidates:
+            eligible_ids = None
+            for shift_type, day_, weekday_, skill_formula in entries:
+                day_ids = {e.id for e in employees if eligible(e, shift_type, day_, weekday_, skill_formula)}
+                eligible_ids = day_ids if eligible_ids is None else (eligible_ids & day_ids)
+
+            if not eligible_ids:
                 warnings.append(
                     f"Weekend {sab_day}-{dom_day or sab_day}: nessun candidato disponibile per il ruolo {role_code}."
                 )
                 continue
 
-            candidates -= used_this_weekend
-            if not candidates:
-                warnings.append(
-                    f"Weekend {sab_day}-{dom_day or sab_day}: ruolo {role_code} senza candidati residui (gia' usati altri ruoli)."
-                )
-                continue
+            by_id = {e.id: e for e in employees}
+            first_st, first_day, first_weekday_, _ = entries[0]
+            role_vars = []
+            for emp_id in eligible_ids:
+                emp = by_id[emp_id]
+                y = new_x(emp, first_st.id, first_day)
+                role_vars.append(y)
+                weekend_role_vars_by_employee[emp_id].append(y)
+                for shift_type, day_, weekday_, _ in entries[1:]:
+                    x_other = new_x(emp, shift_type.id, day_)
+                    model.Add(x_other == y)
 
-            def weekend_score(emp_id):
-                already = len(state.weekend_keys[emp_id]) + prev_month_weekend_count.get(emp_id, 0)
-                emp = next(e for e in employees if e.id == emp_id)
-                return (already, state.total[emp_id], emp_id)
+            model.Add(sum(role_vars) <= 1)
+            objective_terms.append(SHORTFALL_PENALTY * (1 - sum(role_vars)))
+            role_slots.append((role_code, sab_day, dom_day, role_vars))
 
-            chosen_id = min(candidates, key=weekend_score)
-            chosen = next(e for e in employees if e.id == chosen_id)
-            used_this_weekend.add(chosen_id)
-            state.weekend_keys[chosen_id].add(sab_day)
-
-            for r in applicable:
-                day = sab_day if r.day == "SAB" else dom_day
-                weekday = weekday_of(day)
-                shift_type = shift_types_by_id[r.shift_type_id]
-                ok = try_assign(chosen, shift_type, day, weekday)
-                if not ok:
-                    # I candidati erano stati filtrati PRIMA di iniziare ad assegnare
-                    # questo ruolo: se qui l'assegnazione fallisce comunque, e' un
-                    # conflitto interno al ruolo stesso (es. due turni del ruolo che
-                    # si escludono a vicenda) e va segnalato, non ignorato in silenzio.
-                    warnings.append(
-                        f"Weekend {sab_day}-{dom_day or sab_day}: ruolo {role_code}, turno '{shift_type.name}' "
-                        f"non assegnato a {chosen.name} per un conflitto con un altro turno dello stesso ruolo "
-                        f"(controlla la configurazione dei turni: es. 'esclusivo' incompatibile con un altro "
-                        f"turno dello stesso weekend)."
-                    )
-
-    # --- Pass 2: turni a blocco settimanale (es. corsia) ---
+    # ---------------------------------------------------- turni a blocco settimanale
     weekly_types = [st for st in shift_types if st.weekly_block]
     weeks = {}
     for day in range(1, num_days + 1):
-        wd = weekday_of(day)
-        if wd >= 5:  # solo giorni feriali per i blocchi settimanali
+        if weekday_of(day) >= 5:  # solo giorni feriali per i blocchi settimanali
             continue
         weeks.setdefault(week_index(day), []).append(day)
 
+    block_slots = []  # (shift_type, first_day, block_vars)
     for wk, days_in_week in sorted(weeks.items()):
         for shift_type in weekly_types:
             if shift_type.days_set:
-                valid_days = [d for d in days_in_week if weekday_of(d) in shift_type.days_set]
+                valid_days = [dd for dd in days_in_week if weekday_of(dd) in shift_type.days_set]
             else:
                 valid_days = list(days_in_week)
             if not valid_days:
                 continue
+            if any(is_suppressed(shift_type.id, dd) for dd in valid_days):
+                warnings.append(
+                    f"Settimana giorno {valid_days[0]}: nessun candidato per l'intera settimana del turno "
+                    f"'{shift_type.name}' (soppresso in almeno un giorno della settimana)."
+                )
+                continue
 
-            candidate_ids = None
-            for d in valid_days:
-                weekday = weekday_of(d)
-                if is_suppressed(shift_type.id, d):
-                    candidate_ids = set()
-                    break
-                day_candidates = set(c.id for c in candidates_for(shift_type, d, weekday))
-                candidate_ids = day_candidates if candidate_ids is None else (candidate_ids & day_candidates)
+            eligible_ids = None
+            for dd in valid_days:
+                weekday_ = weekday_of(dd)
+                day_ids = {e.id for e in employees if eligible(e, shift_type, dd, weekday_)}
+                eligible_ids = day_ids if eligible_ids is None else (eligible_ids & day_ids)
 
-            if not candidate_ids:
+            if not eligible_ids:
                 warnings.append(
                     f"Settimana giorno {valid_days[0]}: nessun candidato per l'intera settimana del turno '{shift_type.name}'."
                 )
                 continue
 
-            def block_score(emp_id):
-                group = shift_type.block_group or shift_type.id
-                weeks_done = len({w for w in state.per_block_group_weeks[emp_id] if w[0] == group})
-                emp = next(e for e in employees if e.id == emp_id)
-                return (weeks_done, state.total[emp_id], emp_id)
+            by_id = {e.id: e for e in employees}
+            first_day = valid_days[0]
+            block_vars = []
+            for emp_id in eligible_ids:
+                emp = by_id[emp_id]
+                y = new_x(emp, shift_type.id, first_day)
+                block_vars.append(y)
+                for dd in valid_days[1:]:
+                    x_other = new_x(emp, shift_type.id, dd)
+                    model.Add(x_other == y)
 
-            chosen_id = min(candidate_ids, key=block_score)
-            chosen = next(e for e in employees if e.id == chosen_id)
-            group = shift_type.block_group or shift_type.id
-            state.per_block_group_weeks[chosen_id].add((group, wk))
+            model.Add(sum(block_vars) <= 1)
+            objective_terms.append(SHORTFALL_PENALTY * (1 - sum(block_vars)))
+            block_slots.append((shift_type, first_day, block_vars))
 
-            for d in valid_days:
-                weekday = weekday_of(d)
-                try_assign(chosen, shift_type, d, weekday)
-
-    # --- Pass 3: turni giornalieri ordinari (per priorita' crescente) ---
-    # I turni che fanno parte di un ruolo weekend sono gestiti dal Pass 1 solo
-    # per sabato/domenica: nei giorni feriali restano soggetti al fabbisogno normale.
-    ordinary_types = sorted(
-        [st for st in shift_types if not st.weekly_block and not st.is_extra],
-        key=lambda s: s.priority,
-    )
+    # ------------------------------------------------------- turni giornalieri ordinari
+    ordinary_types = [st for st in shift_types if not st.weekly_block and not st.is_extra]
+    ordinary_slots = []  # (shift_type, day, weekday, required)
 
     for day in range(1, num_days + 1):
         weekday = weekday_of(day)
@@ -454,55 +339,266 @@ def generate_schedule(
             if is_suppressed(shift_type.id, day):
                 continue
 
-            for _slot in range(required):
-                candidates = candidates_for(shift_type, day, weekday)
-                if not candidates:
-                    warnings.append(
-                        f"Giorno {day} ({WEEKDAY_NAMES[weekday]}): turno '{shift_type.name}' senza candidati disponibili."
-                    )
-                    continue
+            candidates = [e for e in employees if eligible(e, shift_type, day, weekday)]
+            slot_vars = [new_x(e, shift_type.id, day) for e in candidates]
+            if slot_vars:
+                model.Add(sum(slot_vars) <= required)
+            ordinary_slots.append((shift_type, day, weekday, required, slot_vars))
+            objective_terms.append(SHORTFALL_PENALTY * (required - sum(slot_vars)))
 
-                candidates.sort(
-                    key=lambda e: (
-                        _fairness_score(e, shift_type, state)
-                        + _preference_score(e, shift_type, day, weekday, preferences, state),
-                        e.id,
-                    )
-                )
-                try_assign(candidates[0], shift_type, day, weekday)
-
-    # --- Pass 4: turni extra (attivati su date specifiche, pool di equita' separato) ---
+    # ------------------------------------------------------------------- turni extra
+    extra_slots = []  # (shift_type, day, weekday, slot_vars)
     for day, active_ids in sorted(extra_activations.items()):
+        weekday = weekday_of(day)
         for shift_type_id in active_ids:
             shift_type = shift_types_by_id.get(shift_type_id)
             if shift_type is None:
                 continue
-            weekday = weekday_of(day)
-            candidates = candidates_for(shift_type, day, weekday)
-            if not candidates:
-                warnings.append(
-                    f"Giorno {day} ({WEEKDAY_NAMES[weekday]}): turno extra '{shift_type.name}' senza candidati disponibili."
-                )
-                continue
-            candidates.sort(
-                key=lambda e: (
-                    _fairness_score(e, shift_type, state)
-                    + _preference_score(e, shift_type, day, weekday, preferences, state),
-                    e.id,
-                )
-            )
-            try_assign(candidates[0], shift_type, day, weekday)
+            candidates = [e for e in employees if eligible(e, shift_type, day, weekday)]
+            slot_vars = [new_x(e, shift_type.id, day) for e in candidates]
+            if slot_vars:
+                model.Add(sum(slot_vars) <= 1)
+            extra_slots.append((shift_type, day, weekday, slot_vars))
+            objective_terms.append(SHORTFALL_PENALTY * (1 - sum(slot_vars)))
 
-    # --- Controllo finale: giorni lavorativi consecutivi ---
+    # ------------------------------------------------- vincoli trasversali per persona/giorno
+    by_day = {}
+    for (emp_id, st_id, day), var in x.items():
+        by_day.setdefault((emp_id, day), []).append((st_id, var))
+
+    conflicts = _shift_type_conflicts(shift_types)
+    for (emp_id, day), items in by_day.items():
+        for i in range(len(items)):
+            st1_id, v1 = items[i]
+            for j in range(i + 1, len(items)):
+                st2_id, v2 = items[j]
+                pair = (st1_id, st2_id) if st1_id < st2_id else (st2_id, st1_id)
+                if pair in conflicts:
+                    model.Add(v1 + v2 <= 1)
+
+    # smonto: turno che richiede riposo il giorno dopo, con eccezione sab->dom
+    for (emp_id, st1_id, day), v1 in list(x.items()):
+        st1 = shift_types_by_id[st1_id]
+        if not st1.requires_rest_next_day or day >= num_days:
+            continue
+        weekday1 = weekday_of(day)
+        weekday2 = weekday_of(day + 1)
+        for st2_id in shift_types_by_id:
+            if weekday1 == SATURDAY and weekday2 == SUNDAY and st1.rest_exception_shift_type_id == st2_id:
+                continue
+            v2 = get_x(emp_id, st2_id, day + 1)
+            if v2 is not None:
+                model.Add(v1 + v2 <= 1)
+
+    # smonto in eredita' dal mese precedente (giorno 1)
+    prev_last_weekday = _prev_month_last_weekday(year, month)
+    for emp in employees:
+        for sid in prev_month_last_shifts.get(emp.id, []):
+            prev_shift = shift_types_by_id.get(sid)
+            if prev_shift is None or not prev_shift.requires_rest_next_day:
+                continue
+            for st2_id in shift_types_by_id:
+                if (
+                    prev_last_weekday == SATURDAY
+                    and weekday_of(1) == SUNDAY
+                    and prev_shift.rest_exception_shift_type_id == st2_id
+                ):
+                    continue
+                v2 = get_x(emp.id, st2_id, 1)
+                if v2 is not None:
+                    model.Add(v2 == 0)
+
+    # distanza minima in giorni tra due occorrenze dello stesso turno
+    for shift_type in shift_types:
+        if shift_type.min_gap_days <= 0:
+            continue
+        days_with_var = sorted({day for (eid, sid, day) in x if sid == shift_type.id})
+        for emp in employees:
+            emp_days = [dd for dd in days_with_var if get_x(emp.id, shift_type.id, dd) is not None]
+            for i in range(len(emp_days)):
+                for j in range(i + 1, len(emp_days)):
+                    d1, d2 = emp_days[i], emp_days[j]
+                    if d2 - d1 > shift_type.min_gap_days:
+                        break
+                    v1 = get_x(emp.id, shift_type.id, d1)
+                    v2 = get_x(emp.id, shift_type.id, d2)
+                    model.Add(v1 + v2 <= 1)
+
+    # "lavora quel giorno?" per ogni dipendente/giorno: serve sia per le
+    # regole di riserva legate a una skill, sia per il limite di giorni
+    # lavorativi consecutivi (vedi sotto).
+    worked = {}
+    for emp in employees:
+        for day in range(1, num_days + 1):
+            day_vars = [v for (eid, sid, dd), v in x.items() if eid == emp.id and dd == day]
+            if not day_vars:
+                continue
+            w = model.NewBoolVar(f"worked_e{emp.id}_d{day}")
+            model.AddMaxEquality(w, day_vars)
+            worked[(emp.id, day)] = w
+
+    # giorni lavorativi consecutivi massimi: vincolo rigido su ogni finestra
+    # scorrevole di (max+1) giorni, compreso il giorno prima dell'inizio del
+    # mese (eredita' dal mese precedente).
+    if max_consecutive_work_days and max_consecutive_work_days > 0:
+        window = max_consecutive_work_days + 1
+        for emp in employees:
+            day0 = 1 if prev_month_last_shifts.get(emp.id) else 0
+            for start in range(1 - (window - 1), num_days - window + 2):
+                days_in_window = range(start, start + window)
+                terms = []
+                for dd in days_in_window:
+                    if dd < 1:
+                        terms.append(day0)
+                    elif (emp.id, dd) in worked:
+                        terms.append(worked[(emp.id, dd)])
+                if terms:
+                    model.Add(sum(terms) <= max_consecutive_work_days)
+
+    if skill_reserve_rules:
+        for rule in skill_reserve_rules:
+            pool = [e for e in employees if rule.skill in e.skills]
+            if len(pool) <= rule.min_free:
+                continue
+            for day in range(1, num_days + 1):
+                if weekday_of(day) != rule.weekday:
+                    continue
+                pool_vars = [worked[(e.id, day)] for e in pool if (e.id, day) in worked]
+                if pool_vars:
+                    model.Add(sum(pool_vars) <= len(pool) - rule.min_free)
+
+    # ------------------------------------------------------------------- obiettivo
+    total_per_employee = {}
+    for emp in employees:
+        emp_vars = [v for (eid, sid, dd), v in x.items() if eid == emp.id]
+        total = sum(emp_vars) if emp_vars else 0
+        total_per_employee[emp.id] = total
+
+    if employees:
+        max_total = model.NewIntVar(0, num_days * max(len(shift_types), 1), "max_total")
+        min_total = model.NewIntVar(0, num_days * max(len(shift_types), 1), "min_total")
+        model.AddMaxEquality(max_total, list(total_per_employee.values()))
+        model.AddMinEquality(min_total, list(total_per_employee.values()))
+        objective_terms.append(FAIRNESS_WEIGHT * (max_total - min_total))
+
+        weekend_total_vars = []
+        for emp in employees:
+            base = prev_month_weekend_count.get(emp.id, 0)
+            role_vars = weekend_role_vars_by_employee[emp.id]
+            weekend_total_vars.append(base + (sum(role_vars) if role_vars else 0))
+        max_weekend = model.NewIntVar(0, len(weekends) + 10, "max_weekend")
+        min_weekend = model.NewIntVar(0, len(weekends) + 10, "min_weekend")
+        model.AddMaxEquality(max_weekend, weekend_total_vars)
+        model.AddMinEquality(min_weekend, weekend_total_vars)
+        objective_terms.append(WEEKEND_FAIRNESS_WEIGHT * (max_weekend - min_weekend))
+
+    # preferenze pesate: EVITA/PREFERISCI/RISERVA agiscono come costo diretto
+    # sull'assegnazione; MAX_MESE penalizza il superamento di una soglia
+    # mensile, senza mai vietarlo del tutto (e' un limite "morbido").
+    maxmese_overflow_cache = {}
+    for p in preferences:
+        target_employees = [e for e in employees if p.employee_id is None or p.employee_id == e.id]
+        target_shift_types = [st for st in shift_types if p.shift_type_id is None or p.shift_type_id == st.id]
+
+        for emp in target_employees:
+            for st in target_shift_types:
+                relevant_days = [
+                    dd for (eid, sid, dd) in x if eid == emp.id and sid == st.id
+                    and (not p.days_set or weekday_of(dd) in p.days_set)
+                ]
+                if not relevant_days:
+                    continue
+                day_vars = [x[(emp.id, st.id, dd)] for dd in relevant_days]
+
+                if p.pref_type == "EVITA":
+                    for v in day_vars:
+                        objective_terms.append(p.weight * v)
+                elif p.pref_type == "PREFERISCI":
+                    for v in day_vars:
+                        objective_terms.append(-p.weight * v)
+                elif p.pref_type == "RISERVA":
+                    for v in day_vars:
+                        objective_terms.append(p.weight * 500 * v)
+                elif p.pref_type == "MAX_MESE" and p.weight > 0:
+                    key = (emp.id, st.id)
+                    if key not in maxmese_overflow_cache:
+                        count_expr = sum(day_vars)
+                        overflow = model.NewIntVar(0, num_days, f"overflow_e{emp.id}_s{st.id}")
+                        model.Add(overflow >= count_expr - p.weight)
+                        maxmese_overflow_cache[key] = overflow
+                        objective_terms.append(MAX_MESE_PENALTY * overflow)
+
+    model.Minimize(sum(objective_terms) if objective_terms else 0)
+
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = SOLVER_TIME_LIMIT_SECONDS
+    solver.parameters.num_search_workers = 8
+    status = solver.Solve(model)
+
+    assignments = []
+    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        for (emp_id, st_id, day), var in x.items():
+            if solver.Value(var):
+                assignments.append({"employee_id": emp_id, "shift_type_id": st_id, "day": day})
+    else:
+        warnings.append(
+            "Il risolutore non ha trovato nessuna soluzione (anche parziale): controlla la configurazione."
+        )
+
+    # ------------------------------------------------------------ avvisi di copertura
+    solved_ok = status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+    for role_code, sab_day, dom_day, role_vars in role_slots:
+        actual = sum(solver.Value(v) for v in role_vars) if solved_ok else 0
+        if actual < 1:
+            warnings.append(
+                f"Weekend {sab_day}-{dom_day or sab_day}: ruolo {role_code} non assegnato a nessuno "
+                f"(verifica se i turni del ruolo sono incompatibili tra loro, es. uno 'esclusivo', oppure se "
+                f"manca personale disponibile per l'intero weekend)."
+            )
+
+    for shift_type, first_day, block_vars in block_slots:
+        actual = sum(solver.Value(v) for v in block_vars) if solved_ok else 0
+        if actual < 1:
+            warnings.append(
+                f"Settimana giorno {first_day}: turno '{shift_type.name}' a blocco settimanale non assegnato "
+                f"a nessuno."
+            )
+
+    for shift_type, day, weekday, required, slot_vars in ordinary_slots:
+        actual = sum(solver.Value(v) for v in slot_vars) if solved_ok else 0
+        if actual < required:
+            warnings.append(
+                f"Giorno {day} ({WEEKDAY_NAMES[weekday]}): turno '{shift_type.name}' coperto {actual}/{required} "
+                f"persone per mancanza di personale disponibile/qualificato."
+            )
+
+    for shift_type, day, weekday, slot_vars in extra_slots:
+        actual = sum(solver.Value(v) for v in slot_vars) if solved_ok else 0
+        if actual < 1 and slot_vars:
+            warnings.append(
+                f"Giorno {day} ({WEEKDAY_NAMES[weekday]}): turno extra '{shift_type.name}' senza candidati disponibili."
+            )
+        elif not slot_vars:
+            warnings.append(
+                f"Giorno {day} ({WEEKDAY_NAMES[weekday]}): turno extra '{shift_type.name}' senza candidati disponibili."
+            )
+
+    # ----------------------------------------------------- giorni consecutivi (avviso)
+    assigned_day_of = {}
+    for a in assignments:
+        assigned_day_of.setdefault(a["employee_id"], {}).setdefault(a["day"], []).append(a["shift_type_id"])
+
     for emp in employees:
         run = 1 if prev_month_last_shifts.get(emp.id) else 0
         for day in range(1, num_days + 1):
-            worked = bool(state.assigned_day[emp.id].get(day))
+            worked = bool(assigned_day_of.get(emp.id, {}).get(day))
             if worked:
                 run += 1
                 if run == max_consecutive_work_days + 1:
                     warnings.append(
-                        f"{emp.name}: supera {max_consecutive_work_days} giorni lavorativi consecutivi (dal giorno {day - max_consecutive_work_days})."
+                        f"{emp.name}: supera {max_consecutive_work_days} giorni lavorativi consecutivi "
+                        f"(dal giorno {day - max_consecutive_work_days})."
                     )
             else:
                 run = 0

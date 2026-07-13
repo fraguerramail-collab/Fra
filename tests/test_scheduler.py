@@ -82,13 +82,16 @@ def test_requires_rest_next_day_blocked_without_exception():
 
 
 def test_requires_rest_next_day_exception_saturday_sunday():
-    # 2026-01-01 e' giovedi': il primo sabato e' il 3, domenica il 4.
+    # 2026-01-01 e' giovedi': il primo sabato e' il 3, domenica il 4. L'unica
+    # domanda del mese e' il ruolo weekend stesso (nessun fabbisogno
+    # ordinario altrove), cosi' l'unica soluzione a copertura piena e'
+    # proprio quella che sfrutta l'eccezione smonto sab->dom.
     employees = [emp(1, "A", skills={"X"})]
     night = shift(
         1, "Notte", skill_required="X", requires_rest_next_day=True, exclusive_day=True,
-        rest_exception_shift_type_id=2, priority=1,
+        rest_exception_shift_type_id=2, priority=1, requirements_by_weekday={},
     )
-    sunday_shift = shift(2, "Reperibilita", skill_required="X", priority=2)
+    sunday_shift = shift(2, "Reperibilita", skill_required="X", priority=2, requirements_by_weekday={})
 
     weekend_roles = [
         WeekendRoleInput(role_code="A", day="SAB", shift_type_id=1, skill_required="X"),
@@ -100,6 +103,7 @@ def test_requires_rest_next_day_exception_saturday_sunday():
     assignments_by_shift_day = {(a["shift_type_id"], a["day"]) for a in result.assignments}
     assert (1, 3) in assignments_by_shift_day
     assert (2, 4) in assignments_by_shift_day
+    assert not result.warnings
 
 
 def test_weekend_role_same_day_shifts_both_assigned_when_not_exclusive():
@@ -125,7 +129,9 @@ def test_weekend_role_same_day_shifts_both_assigned_when_not_exclusive():
 
 def test_weekend_role_internal_conflict_warns_instead_of_silently_dropping():
     # Se un ruolo unisce due turni incompatibili lo stesso giorno (uno
-    # "esclusivo"), il secondo non puo' essere assegnato: deve comparire un
+    # "esclusivo"), non esiste nessuna persona che possa coprire l'intero
+    # ruolo: il motore non assegna ne' l'uno ne' l'altro (un ruolo e' o
+    # tutto coperto dalla stessa persona, o niente) e lo segnala con un
     # avviso esplicito invece di sparire senza spiegazione.
     employees = [emp(1, "A", skills={"X"})]
     night = shift(1, "Notte", skill_required="X", exclusive_day=True, priority=1, requirements_by_weekday={})
@@ -139,9 +145,9 @@ def test_weekend_role_internal_conflict_warns_instead_of_silently_dropping():
     result = run(employees=employees, shift_types=[night, urgenza], weekend_roles=weekend_roles)
 
     assignments_by_shift_day = {(a["shift_type_id"], a["day"]) for a in result.assignments}
-    assert (1, 4) in assignments_by_shift_day
+    assert (1, 4) not in assignments_by_shift_day
     assert (2, 4) not in assignments_by_shift_day
-    assert any("conflitto" in w for w in result.warnings)
+    assert any("non assegnato" in w for w in result.warnings)
 
 
 def test_weekend_role_only_blocks_its_own_day_not_the_whole_weekend():
@@ -227,13 +233,23 @@ def test_prev_month_last_shift_triggers_rest_on_day_one():
     assert 2 not in day_one_shifts
 
 
-def test_max_consecutive_days_generates_warning():
+def test_max_consecutive_days_is_a_hard_limit():
+    # Unico candidato per un turno richiesto tutti i giorni: il limite di
+    # giorni consecutivi e' un vincolo rigido, quindi il motore lo rispetta
+    # sempre (si ferma dopo 3 giorni di fila e lascia scoperti gli altri,
+    # invece di sforare e limitarsi a un avviso).
     employees = [emp(1, "A", skills={"X"})]
     shift_types = [shift(1, "Giorno", skill_required="X")]
 
     result = run(employees=employees, shift_types=shift_types, max_consecutive_work_days=3)
 
-    assert any("giorni lavorativi consecutivi" in w for w in result.warnings)
+    assigned_days = sorted(a["day"] for a in result.assignments)
+    run_length = 0
+    for i, d in enumerate(assigned_days):
+        run_length = run_length + 1 if i > 0 and assigned_days[i - 1] == d - 1 else 1
+        assert run_length <= 3
+    assert not any("supera" in w and "consecutivi" in w for w in result.warnings)
+    assert any("coperto" in w for w in result.warnings)
 
 
 def test_preference_max_mese_is_soft_not_hard():
@@ -241,7 +257,9 @@ def test_preference_max_mese_is_soft_not_hard():
     shift_types = [shift(1, "Turno", skill_required="X")]
     prefs = [PreferenceInput(employee_id=1, shift_type_id=1, days_set=set(), pref_type="MAX_MESE", weight=2)]
 
-    result = run(employees=employees, shift_types=shift_types, preferences=prefs)
+    # max_consecutive_work_days alto per isolare il comportamento di MAX_MESE
+    # dal limite (ora rigido) dei giorni lavorativi consecutivi.
+    result = run(employees=employees, shift_types=shift_types, preferences=prefs, max_consecutive_work_days=31)
 
     # unico candidato disponibile: la regola MAX_MESE penalizza ma non blocca
     assert len(result.assignments) == 31
