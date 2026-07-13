@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Weekend - Gestione Turni{% endblock %}
+{% block content %}
+<h1>Ruoli weekend</h1>
+<p>Ogni ruolo (es. A, B, C, D) rappresenta un incarico che lo <strong>stesso dipendente</strong> copre per l'intero weekend (sabato e/o domenica). Definisci quale turno copre il ruolo in ciascun giorno e con quale skill.</p>
+
+<div class="card">
+  <h2>Aggiungi voce ruolo</h2>
+  <form method="post" action="{{ url_for('main.weekend_pattern') }}">
+    <label>Codice ruolo<br><input type="text" name="role_code" maxlength="10" required style="width:5rem" placeholder="A"></label>
+    &nbsp;
+    <label>Giorno<br>
+      <select name="day">
+        <option value="SAB">Sabato</option>
+        <option value="DOM">Domenica</option>
+      </select>
+    </label>
+    &nbsp;
+    <label>Turno<br>
+      <select name="shift_type_id">
+        {% for st in shift_types %}<option value="{{ st.id }}">{{ st.name }}</option>{% endfor %}
+      </select>
+    </label>
+    &nbsp;
+    <label>Skill richiesta (opzionale, sovrascrive quella del turno)<br><input type="text" name="skill_required" placeholder="es. PR|SR"></label>
+    &nbsp;
+    <button type="submit">Aggiungi</button>
+  </form>
+</div>
+
+<div class="card table-scroll">
+  <table>
+    <thead><tr><th>Ruolo</th><th>Giorno</th><th>Turno</th><th>Skill richiesta</th><th></th></tr></thead>
+    <tbody>
+      {% for r in roles %}
+      <tr>
+        <td>{{ r.role_code }}</td>
+        <td>{{ 'Sabato' if r.day == 'SAB' else 'Domenica' }}</td>
+        <td>{{ r.shift_type.name }}</td>
+        <td>{{ r.skill_required or r.shift_type.skill_required or '-' }}</td>
+        <td>
+          <form class="inline" method="post" action="{{ url_for('main.delete_weekend_role', role_id=r.id) }}">
+            <button type="submit" class="danger">Elimina</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">Nessun ruolo weekend definito.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

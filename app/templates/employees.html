@@ -6,9 +6,15 @@
 <div class="card">
   <h2>Aggiungi dipendente</h2>
   <form method="post" action="{{ url_for('main.employees') }}">
+    <label>Codice<br><input type="text" name="code" maxlength="20" required style="width:6rem"></label>
+    &nbsp;
     <label>Nome<br><input type="text" name="name" required></label>
     &nbsp;
-    <label>Max turni/settimana (opzionale)<br><input type="number" name="max_shifts_per_week" min="1"></label>
+    <label>Fascia/categoria<br><input type="text" name="category" placeholder="es. STRUTTURATO, SP"></label>
+    &nbsp;
+    <label>Skill (separate da virgola)<br><input type="text" name="skills" placeholder="es. PR,SR,BREAST"></label>
+    &nbsp;
+    <label>Max turni/settimana<br><input type="number" name="max_shifts_per_week" min="1"></label>
     &nbsp;
     <button type="submit">Aggiungi</button>
   </form>
@@ -18,14 +24,17 @@
   <h2>Elenco</h2>
   <table>
     <thead>
-      <tr><th>Nome</th><th>Attivo</th><th>Max turni/sett.</th><th>Note</th><th>Azioni</th></tr>
+      <tr><th>Codice</th><th>Nome</th><th>Fascia</th><th>Skill</th><th>Attivo</th><th>Max/sett.</th><th>Note</th><th>Azioni</th></tr>
     </thead>
     <tbody>
       {% for emp in employees %}
       <tr>
+        <td><input type="text" name="code" value="{{ emp.code }}" style="width:5rem" form="emp-form-{{ emp.id }}"></td>
         <td><input type="text" name="name" value="{{ emp.name }}" form="emp-form-{{ emp.id }}"></td>
+        <td><input type="text" name="category" value="{{ emp.category or '' }}" style="width:7rem" form="emp-form-{{ emp.id }}"></td>
+        <td><input type="text" name="skills" value="{{ emp.skills or '' }}" style="width:9rem" form="emp-form-{{ emp.id }}"></td>
         <td><input type="checkbox" name="active" {% if emp.active %}checked{% endif %} form="emp-form-{{ emp.id }}"></td>
-        <td><input type="number" name="max_shifts_per_week" min="1" value="{{ emp.max_shifts_per_week or '' }}" style="width:5rem" form="emp-form-{{ emp.id }}"></td>
+        <td><input type="number" name="max_shifts_per_week" min="1" value="{{ emp.max_shifts_per_week or '' }}" style="width:4rem" form="emp-form-{{ emp.id }}"></td>
         <td><input type="text" name="notes" value="{{ emp.notes or '' }}" form="emp-form-{{ emp.id }}"></td>
         <td>
           <form id="emp-form-{{ emp.id }}" method="post" action="{{ url_for('main.edit_employee', employee_id=emp.id) }}" class="inline"></form>
@@ -36,7 +45,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="5">Nessun dipendente inserito.</td></tr>
+      <tr><td colspan="8">Nessun dipendente inserito.</td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Preferenze - Gestione Turni{% endblock %}
+{% block content %}
+<h1>Preferenze</h1>
+<p>
+  <strong>EVITA</strong>: penalizza l'assegnazione (piu' alto il peso, piu' viene evitata). &middot;
+  <strong>PREFERISCI</strong>: favorisce l'assegnazione. &middot;
+  <strong>RISERVA</strong>: da usare solo se non ci sono alternative migliori. &middot;
+  <strong>MAX_MESE</strong>: il peso e' il numero massimo di occorrenze mensili consentite (oltre e' fortemente penalizzato, non vietato).
+</p>
+
+<div class="card">
+  <h2>Aggiungi preferenza</h2>
+  <form method="post" action="{{ url_for('main.preferences') }}">
+    <label>Dipendente (vuoto = tutti)<br>
+      <select name="employee_id">
+        <option value="">-- tutti --</option>
+        {% for emp in employees %}<option value="{{ emp.id }}">{{ emp.name }}</option>{% endfor %}
+      </select>
+    </label>
+    &nbsp;
+    <label>Turno (vuoto = tutti)<br>
+      <select name="shift_type_id">
+        <option value="">-- tutti --</option>
+        {% for st in shift_types %}<option value="{{ st.id }}">{{ st.name }}</option>{% endfor %}
+      </select>
+    </label>
+    &nbsp;
+    <label>Tipo<br>
+      <select name="pref_type">
+        {% for t in pref_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+      </select>
+    </label>
+    &nbsp;
+    <label>Peso / limite<br><input type="number" name="weight" value="1" style="width:5rem"></label>
+    <br><br>
+    <label><strong>Giorni (vuoto = tutti):</strong></label>
+    {% for weekday in range(7) %}
+    <label><input type="checkbox" name="days_set" value="{{ weekday }}"> {{ weekday_names[weekday][:3] }}</label>
+    {% endfor %}
+    <br><br>
+    <button type="submit">Aggiungi</button>
+  </form>
+</div>
+
+<div class="card table-scroll">
+  <table>
+    <thead><tr><th>Dipendente</th><th>Turno</th><th>Giorni</th><th>Tipo</th><th>Peso</th><th></th></tr></thead>
+    <tbody>
+      {% for p in preferences %}
+      <tr>
+        <td>{{ p.employee.name if p.employee else 'tutti' }}</td>
+        <td>{{ p.shift_type.name if p.shift_type else 'tutti' }}</td>
+        <td>{% if p.days_set %}{% for wd in p.days_set_list() %}{{ weekday_names[wd][:3] }} {% endfor %}{% else %}tutti{% endif %}</td>
+        <td>{{ p.pref_type }}</td>
+        <td>{{ p.weight }}</td>
+        <td>
+          <form class="inline" method="post" action="{{ url_for('main.delete_preference', pref_id=p.id) }}">
+            <button type="submit" class="danger">Elimina</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">Nessuna preferenza definita.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

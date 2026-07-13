@@ -6,13 +6,9 @@
 <div class="card">
   <h2>Aggiungi tipo di turno</h2>
   <form method="post" action="{{ url_for('main.shift_types') }}">
+    <label>Codice<br><input type="text" name="code" maxlength="20" required style="width:6rem"></label>
+    &nbsp;
     <label>Nome<br><input type="text" name="name" required></label>
-    &nbsp;
-    <label>Sigla<br><input type="text" name="code" maxlength="10" style="width:5rem"></label>
-    &nbsp;
-    <label>Inizio<br><input type="time" name="start_time" value="07:00"></label>
-    &nbsp;
-    <label>Fine<br><input type="time" name="end_time" value="14:00"></label>
     &nbsp;
     <label>Colore<br><input type="color" name="color" value="#4f7cff"></label>
     &nbsp;
@@ -27,15 +23,60 @@
       <span class="pill" style="background: {{ st.color }}">{{ st.code }}</span>
       <input type="text" name="name" value="{{ st.name }}" style="font-size:1rem">
     </h2>
-    <label>Sigla <input type="text" name="code" value="{{ st.code }}" style="width:4rem"></label>
-    &nbsp;
-    <label>Inizio <input type="time" name="start_time" value="{{ st.start_time }}"></label>
-    &nbsp;
-    <label>Fine <input type="time" name="end_time" value="{{ st.end_time }}"></label>
-    &nbsp;
-    <label>Colore <input type="color" name="color" value="{{ st.color }}"></label>
 
-    <h3>Personale richiesto per giorno della settimana</h3>
+    <div class="toolbar">
+      <label>Codice <input type="text" name="code" value="{{ st.code }}" style="width:5rem"></label>
+      <label>Gruppo <input type="text" name="group" value="{{ st.group or '' }}" style="width:9rem" placeholder="NOTTE, GUARDIA, CORSIA..."></label>
+      <label>Colore <input type="color" name="color" value="{{ st.color }}"></label>
+      <label>Priorità assegnazione <input type="number" name="priority" value="{{ st.priority }}" style="width:5rem" title="Piu' basso = assegnato prima"></label>
+    </div>
+
+    <div class="toolbar">
+      <label><strong>Fasce orarie:</strong></label>
+      {% set current_bands = (st.time_bands or '').split(',') %}
+      {% for band in time_bands %}
+      <label><input type="checkbox" name="time_bands" value="{{ band }}" {% if band in current_bands %}checked{% endif %}> {{ band }}</label>
+      {% endfor %}
+    </div>
+
+    <div class="toolbar">
+      <label><strong>Giorni previsti</strong> (nessuno selezionato = tutti i giorni):</label>
+      {% set current_days = (st.days_set or '').split(',') %}
+      {% for weekday in range(7) %}
+      <label><input type="checkbox" name="days_set" value="{{ weekday }}" {% if current_days and weekday|string in current_days %}checked{% endif %}> {{ weekday_names[weekday][:3] }}</label>
+      {% endfor %}
+    </div>
+
+    <div class="toolbar">
+      <label>Skill richiesta (OR con "|") <input type="text" name="skill_required" value="{{ st.skill_required or '' }}" placeholder="es. PR|SR"></label>
+      <label>Categorie escluse (CSV) <input type="text" name="excluded_categories" value="{{ st.excluded_categories or '' }}" placeholder="es. SP"></label>
+    </div>
+
+    <div class="toolbar">
+      <label><input type="checkbox" name="exclusive_day" {% if st.exclusive_day %}checked{% endif %}> Turno esclusivo (nessun altro turno lo stesso giorno)</label>
+      <label><input type="checkbox" name="requires_rest_next_day" {% if st.requires_rest_next_day %}checked{% endif %}> Richiede riposo il giorno dopo (smonto)</label>
+      <label>Eccezione smonto (turno ammesso sab→dom)
+        <select name="rest_exception_shift_type_id">
+          <option value="">-- nessuna --</option>
+          {% for other in shift_types %}
+          <option value="{{ other.id }}" {% if st.rest_exception_shift_type_id == other.id %}selected{% endif %}>{{ other.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Distanza minima tra due occorrenze (giorni) <input type="number" name="min_gap_days" min="0" value="{{ st.min_gap_days }}" style="width:4rem"></label>
+    </div>
+
+    <div class="toolbar">
+      <label><input type="checkbox" name="weekly_block" {% if st.weekly_block %}checked{% endif %}> Assegnato per l'intera settimana (es. corsia)</label>
+      <label>Gruppo equità settimanale <input type="text" name="block_group" value="{{ st.block_group or '' }}" placeholder="es. CORSIA" style="width:8rem"></label>
+    </div>
+
+    <div class="toolbar">
+      <label><input type="checkbox" name="is_extra" {% if st.is_extra %}checked{% endif %}> Turno extra (attivabile solo su date specifiche, pagina "Extra")</label>
+      <label>Pool equità separato <input type="text" name="balance_pool" value="{{ st.balance_pool or '' }}" placeholder="es. EXTRA_ECONOMICO" style="width:10rem"></label>
+    </div>
+
+    <h3>Personale richiesto per giorno della settimana (non usato per turni "corsia" o "extra"; ignorato sab/dom se il turno fa parte di un ruolo weekend)</h3>
     <table style="max-width:700px">
       <thead><tr>{% for wd in weekday_names %}<th>{{ wd[:3] }}</th>{% endfor %}</tr></thead>
       <tbody>

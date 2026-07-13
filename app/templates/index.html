@@ -5,22 +5,27 @@
 <p>Dipendenti attivi: <strong>{{ n_employees }}</strong> &middot; Tipi di turno configurati: <strong>{{ n_shift_types }}</strong></p>
 
 <div class="grid-links">
-  <a href="{{ url_for('main.employees') }}">👥 Dipendenti<br><small>Anagrafica del personale</small></a>
-  <a href="{{ url_for('main.shift_types') }}">🕒 Tipi di turno<br><small>Mattina, pomeriggio, notte, fabbisogno per giorno</small></a>
-  <a href="{{ url_for('main.qualifications') }}">✅ Qualifiche<br><small>Chi può coprire quale turno</small></a>
-  <a href="{{ url_for('main.rules') }}">📏 Regole<br><small>Giorni consecutivi, riposo, sequenze vietate</small></a>
-  <a href="{{ url_for('main.availability') }}">🗓️ Disponibilità<br><small>Disponibilità mensile per dipendente</small></a>
-  <a href="{{ url_for('main.schedule') }}">⚙️ Pianificazione<br><small>Genera ed esporta i turni del mese</small></a>
+  <a href="{{ url_for('main.employees') }}">👥 Dipendenti<br><small>Anagrafica, fascia/categoria, skill</small></a>
+  <a href="{{ url_for('main.shift_types') }}">🕒 Tipi di turno<br><small>Fasce orarie, skill, smonto, distanza minima, corsia settimanale, extra</small></a>
+  <a href="{{ url_for('main.weekend_pattern') }}">🗓️ Weekend<br><small>Ruoli A/B/C/D che coprono l'intero weekend</small></a>
+  <a href="{{ url_for('main.preferences') }}">⭐ Preferenze<br><small>Evita/preferisci/riserva/massimo mensile</small></a>
+  <a href="{{ url_for('main.rules') }}">📏 Regole<br><small>Giorni lavorativi consecutivi massimi</small></a>
+  <a href="{{ url_for('main.availability') }}">✅ Disponibilità<br><small>Disponibilità mensile granulare per fascia oraria</small></a>
+  <a href="{{ url_for('main.suppressions') }}">🚫 Soppressioni<br><small>Turni non necessari in date specifiche</small></a>
+  <a href="{{ url_for('main.extra_shifts') }}">➕ Extra<br><small>Attivazione turni extra su date puntuali</small></a>
+  <a href="{{ url_for('main.schedule') }}">⚙️ Pianificazione<br><small>Genera, correggi ed esporta i turni del mese</small></a>
+  <a href="{{ url_for('main.report') }}">📊 Report<br><small>Conteggi e avvisi per dipendente</small></a>
 </div>
 
 <div class="card">
   <h2>Come funziona</h2>
   <ol>
-    <li>Configura i <strong>tipi di turno</strong> e quante persone servono per ciascun giorno della settimana.</li>
-    <li>Configura le <strong>qualifiche</strong> (chi può fare quale turno) e le <strong>regole</strong> globali (giorni consecutivi massimi, riposo settimanale, sequenze vietate come Notte→Mattina).</li>
-    <li>Ogni mese, inserisci le <strong>disponibilità</strong> dei colleghi (le eccezioni: assenze, ferie, preferenze).</li>
-    <li>Vai in <strong>Pianificazione</strong>, scegli mese e anno e clicca "Genera turni": il sistema assegna automaticamente i turni rispettando le regole, distribuendo il carico in modo equo.</li>
-    <li>Puoi correggere manualmente il risultato ed esportarlo in CSV.</li>
+    <li>Configura i <strong>tipi di turno</strong>: fasce orarie, skill richieste, se il turno è esclusivo, se richiede riposo il giorno dopo (smonto), la distanza minima tra due occorrenze, se è assegnato per l'intera settimana (corsia) o solo su attivazione (extra).</li>
+    <li>Se avete weekend organizzati a ruoli (lo stesso medico copre più turni tra sabato e domenica), definiscili in <strong>Weekend</strong>.</li>
+    <li>Aggiungi eventuali <strong>preferenze</strong> pesate per dipendente/turno/giorno.</li>
+    <li>Ogni mese inserisci le <strong>disponibilità</strong> (con granularità mattina/pomeriggio/notte, ferie, malattia), eventuali <strong>soppressioni</strong> e <strong>turni extra</strong> attivi.</li>
+    <li>Vai in <strong>Pianificazione</strong> e genera: il sistema assegna i turni rispettando skill, smonto, distanze minime, ruoli weekend e corsia settimanale, con equità del carico (anche verso il mese precedente).</li>
+    <li>Correggi manualmente se necessario, controlla il <strong>Report</strong> per gli avvisi ed esporta in CSV.</li>
   </ol>
 </div>
 {% endblock %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Report - Gestione Turni{% endblock %}
+{% block content %}
+<h1>Report — {{ month_name }} {{ year }}</h1>
+
+<form method="get" action="{{ url_for('main.report') }}" class="toolbar">
+  <label>Mese
+    <select name="mese">
+      {% for i in range(1, 13) %}
+      <option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ month_names[i] }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Anno <input type="number" name="anno" value="{{ year }}" style="width:6rem"></label>
+  <button type="submit">Vai</button>
+</form>
+
+<div class="card table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>Dipendente</th>
+        <th>Totale</th>
+        {% for st in shift_types %}<th>{{ st.code }}</th>{% endfor %}
+        <th>Alert</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr {% if row.alerts %}style="background:#fdf1de"{% endif %}>
+        <td>{{ row.employee.name }}</td>
+        <td>{{ row.counts.total }}</td>
+        {% for st in shift_types %}<td>{{ row.counts.per_type.get(st.id, 0) }}</td>{% endfor %}
+        <td>{{ row.alerts | join(', ') }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="{{ shift_types|length + 3 }}">Nessun dato per questo mese.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

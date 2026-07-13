@@ -15,7 +15,7 @@
   <button type="submit">Vai</button>
 </form>
 
-<p>Per ogni dipendente e giorno, indica lo stato: <strong>Disponibile</strong> (default), <strong>Non disponibile</strong> o <strong>Preferenza riposo</strong> (disponibile solo se necessario).</p>
+<p>Per ogni dipendente e giorno, indica lo stato. Default: <strong>Disponibile</strong>.</p>
 
 <form method="post" action="{{ url_for('main.availability', anno=year, mese=month) }}">
   <div class="card table-scroll">
@@ -31,12 +31,12 @@
         <tr>
           <td>{{ emp.name }}</td>
           {% for day in day_range %}
-          {% set current = avail_map.get((emp.id, day), 'AVAILABLE') %}
+          {% set current = avail_map.get((emp.id, day), 'OK') %}
           <td>
-            <select name="a_{{ emp.id }}_{{ day }}" class="status-{{ current|lower }}" onchange="this.className='status-'+this.value.toLowerCase()">
-              <option value="AVAILABLE" {% if current == 'AVAILABLE' %}selected{% endif %}>Disp.</option>
-              <option value="UNAVAILABLE" {% if current == 'UNAVAILABLE' %}selected{% endif %}>Non disp.</option>
-              <option value="PREFERRED_OFF" {% if current == 'PREFERRED_OFF' %}selected{% endif %}>Pref. riposo</option>
+            <select name="a_{{ emp.id }}_{{ day }}" style="min-width:8rem">
+              {% for value, label in options %}
+              <option value="{{ value }}" {% if current == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
             </select>
           </td>
           {% endfor %}

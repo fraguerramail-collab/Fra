@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Soppressioni - Gestione Turni{% endblock %}
+{% block content %}
+<h1>Soppressioni</h1>
+<p>Sopprime un turno obbligatorio in una data specifica (es. attività sospesa): non verrà segnalato come scoperto in fase di generazione.</p>
+
+<form method="get" action="{{ url_for('main.suppressions') }}" class="toolbar">
+  <label>Mese
+    <select name="mese">
+      {% for i in range(1, 13) %}
+      <option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ month_names[i] }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Anno <input type="number" name="anno" value="{{ year }}" style="width:6rem"></label>
+  <button type="submit">Vai</button>
+</form>
+
+<div class="card">
+  <h2>Aggiungi soppressione — {{ month_name }} {{ year }}</h2>
+  <form method="post" action="{{ url_for('main.suppressions', anno=year, mese=month) }}">
+    <label>Turno<br>
+      <select name="shift_type_id">
+        {% for st in shift_types %}<option value="{{ st.id }}">{{ st.name }}</option>{% endfor %}
+      </select>
+    </label>
+    &nbsp;
+    <label>Giorno<br>
+      <select name="day">
+        {% for d in day_range %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+      </select>
+    </label>
+    &nbsp;
+    <label>Motivo<br><input type="text" name="reason"></label>
+    &nbsp;
+    <button type="submit">Aggiungi</button>
+  </form>
+</div>
+
+<div class="card table-scroll">
+  <table>
+    <thead><tr><th>Giorno</th><th>Turno</th><th>Motivo</th><th></th></tr></thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td>{{ item.day }}</td>
+        <td>{{ item.shift_type.name }}</td>
+        <td>{{ item.reason or '' }}</td>
+        <td>
+          <form class="inline" method="post" action="{{ url_for('main.delete_suppression', item_id=item.id) }}">
+            <button type="submit" class="danger">Elimina</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">Nessuna soppressione per questo mese.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

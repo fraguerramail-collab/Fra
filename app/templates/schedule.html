@@ -47,9 +47,7 @@
           <td class="cell-slot">
             <select name="slot_{{ day }}_{{ st.id }}" multiple size="3" style="width:100%">
               {% for emp in employees %}
-              {% if st.id in qual_map.get(emp.id, []) %}
               <option value="{{ emp.id }}" {% if emp in assigned %}selected{% endif %}>{{ emp.name }}</option>
-              {% endif %}
               {% endfor %}
             </select>
           </td>
