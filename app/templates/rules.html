@@ -23,7 +23,12 @@
   </small></p>
 
   <form method="post" action="{{ url_for('main.add_skill_rule') }}">
-    <label>Skill <input type="text" name="skill" placeholder="es. BREAST" required style="width:8rem"></label>
+    <label>Skill
+      <input type="text" name="skill" placeholder="es. BREAST" required style="width:10rem" list="known-skills">
+      <datalist id="known-skills">
+        {% for s in known_skills %}<option value="{{ s }}">{% endfor %}
+      </datalist>
+    </label>
     <label>Giorno
       <select name="weekday">
         {% for wd in range(7) %}<option value="{{ wd }}">{{ weekday_names[wd] }}</option>{% endfor %}
@@ -38,13 +43,17 @@
     <label>N minimo liberi (solo per Riserva) <input type="number" name="min_free" min="1" value="1" style="width:4rem"></label>
     <button type="submit">Aggiungi</button>
   </form>
+  <p><small>Il campo Skill suggerisce le skill già usate su almeno un dipendente o un turno, ma resta libero: puoi scriverne una nuova se la stai preparando in anticipo.</small></p>
 
-  <table style="margin-top:1rem; max-width:600px">
+  <table style="margin-top:1rem; max-width:650px">
     <thead><tr><th>Skill</th><th>Giorno</th><th>Regola</th><th></th></tr></thead>
     <tbody>
-      {% for r in skill_rules %}
+      {% for r, is_orphan in rules_with_status %}
       <tr>
-        <td>{{ r.skill }}</td>
+        <td>
+          {{ r.skill }}
+          {% if is_orphan %}<span class="pill" style="background:var(--danger)" title="Nessun dipendente attivo ha questa skill: la regola non si applica a nessuno.">nessuno con questa skill</span>{% endif %}
+        </td>
         <td>{{ weekday_names[r.weekday] }}</td>
         <td>{% if r.mode == 'BLOCK' %}Blocca{% else %}Riserva almeno {{ r.min_free }} liberi{% endif %}</td>
         <td>

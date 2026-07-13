@@ -467,6 +467,21 @@ def delete_preference(pref_id):
     return redirect(url_for("main.preferences"))
 
 
+def _known_skills():
+    """Tutte le skill in uso da qualche parte (dipendenti o skill_required dei
+    turni), per suggerirle nel form delle regole skill invece di lasciar
+    scrivere un codice libero che puo' non corrispondere a nulla."""
+    skills = set()
+    for e in Employee.query.all():
+        skills.update(parse_csv(e.skills))
+    for st in ShiftType.query.all():
+        for token in (st.skill_required or "").split("|"):
+            token = token.strip()
+            if token:
+                skills.add(token)
+    return sorted(skills)
+
+
 # ---------------------------------------------------------------- regole
 @bp.route("/regole", methods=["GET", "POST"])
 def rules():
@@ -477,7 +492,16 @@ def rules():
         flash("Regole salvate.", "success")
         return redirect(url_for("main.rules"))
     skill_rules = SkillRule.query.order_by(SkillRule.skill, SkillRule.weekday).all()
-    return render_template("rules.html", settings=settings, skill_rules=skill_rules, weekday_names=WEEKDAY_NAMES)
+
+    active_skills = set()
+    for e in Employee.query.filter_by(active=True).all():
+        active_skills.update(parse_csv(e.skills))
+    rules_with_status = [(r, r.skill not in active_skills) for r in skill_rules]
+
+    return render_template(
+        "rules.html", settings=settings, rules_with_status=rules_with_status,
+        weekday_names=WEEKDAY_NAMES, known_skills=_known_skills(),
+    )
 
 
 @bp.route("/regole/skill", methods=["POST"])
