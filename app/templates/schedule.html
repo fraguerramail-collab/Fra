@@ -69,25 +69,25 @@
 </form>
 {% else %}
 <div class="card table-scroll">
-  <table>
+  <table class="table-compact">
     <thead>
       <tr>
-        <th>Giorno</th>
+        <th>G</th>
         {% for st in shift_types %}
-        <th><span class="pill" style="background: {{ st.color }}">{{ st.code }}</span> {{ st.name }}</th>
+        <th title="{{ st.name }}"><span class="pill" style="background: {{ st.color }}">{{ st.code }}</span></th>
         {% endfor %}
       </tr>
     </thead>
     <tbody>
       {% for day in day_range %}
       <tr>
-        <td>{{ day }}<br><small>{{ day_weekday_names[day-1] }}</small></td>
+        <td class="day-cell">{{ day }} <small>{{ day_weekday_names[day-1] }}</small></td>
         {% for st in shift_types %}
         {% set assigned = grid.get((day, st.id), []) %}
         <td class="cell-slot">
           {% if assigned %}
           <div class="chip-list">
-            {% for emp in assigned %}<span class="chip">{{ emp.name }}</span>{% endfor %}
+            {% for emp in assigned %}<span class="chip" title="{{ emp.name }}">{{ emp.code }}</span>{% endfor %}
           </div>
           {% else %}
           <span class="empty-cell">—</span>
@@ -99,6 +99,6 @@
     </tbody>
   </table>
 </div>
-<p><small>Vista di sola lettura. Usa "✏️ Modifica manualmente" qui sopra per correggere le assegnazioni.</small></p>
+<p><small>Vista di sola lettura (sigle dei dipendenti, passa il mouse per il nome completo e sulle intestazioni per il nome del turno). Usa "✏️ Modifica manualmente" qui sopra per correggere le assegnazioni.</small></p>
 {% endif %}
 {% endblock %}

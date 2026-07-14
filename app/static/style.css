@@ -202,7 +202,7 @@ select.status-preferred_off { background: #fdf1de; }
   min-width: 140px;
 }
 
-.chip-list { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.chip-list { display: flex; flex-wrap: wrap; gap: 0.2rem; }
 .chip {
   display: inline-block;
   background: #eef1fa;
@@ -213,3 +213,15 @@ select.status-preferred_off { background: #fdf1de; }
   white-space: nowrap;
 }
 .empty-cell { color: var(--muted); }
+
+.table-compact { font-size: 0.76rem; }
+.table-compact th, .table-compact td { padding: 0.15rem 0.3rem; }
+.table-compact .cell-slot { min-width: 62px; }
+.table-compact .day-cell { white-space: nowrap; font-weight: 600; }
+.table-compact .day-cell small { font-weight: 400; color: var(--muted); }
+.table-compact .chip {
+  padding: 0.05rem 0.35rem;
+  font-size: 0.72rem;
+  border-radius: 5px;
+}
+.table-compact th .pill { font-size: 0.68rem; padding: 0.05rem 0.4rem; }
