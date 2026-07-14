@@ -32,7 +32,12 @@
       </select>
     </label>
     &nbsp;
-    <label>Peso / limite<br><input type="number" name="weight" value="1" style="width:5rem"></label>
+    <label>Peso / limite<br>
+      <input type="range" name="weight" min="0" max="10" step="1" value="1"
+             oninput="this.nextElementSibling.textContent = this.value">
+      <output>1</output>/10
+      <br><small>0 = spenta questo mese &middot; 10 = regola ferrea</small>
+    </label>
     <br><br>
     <label><strong>Giorni (vuoto = tutti):</strong></label>
     {% for weekday in range(7) %}
@@ -53,7 +58,15 @@
         <td>{{ p.shift_type.name if p.shift_type else 'tutti' }}</td>
         <td>{% if p.days_set %}{% for wd in p.days_set_list() %}{{ weekday_names[wd][:3] }} {% endfor %}{% else %}tutti{% endif %}</td>
         <td>{{ p.pref_type }}</td>
-        <td>{{ p.weight }}</td>
+        <td>
+          <form id="pref-form-{{ p.id }}" method="post" action="{{ url_for('main.edit_preference', pref_id=p.id) }}" class="inline"></form>
+          <span class="weight-bar"><span class="weight-bar-fill" style="width: {{ (p.weight / 10 * 100) if p.weight < 10 else 100 }}%"></span></span>
+          <input type="range" min="0" max="10" step="1" value="{{ p.weight if p.weight <= 10 else 10 }}"
+                 name="weight" form="pref-form-{{ p.id }}" style="vertical-align: middle; width: 6rem"
+                 oninput="this.nextElementSibling.textContent = this.value">
+          <output>{{ p.weight }}</output>
+          <button type="submit" form="pref-form-{{ p.id }}">✓</button>
+        </td>
         <td>
           <form class="inline" method="post" action="{{ url_for('main.delete_preference', pref_id=p.id) }}">
             <button type="submit" class="danger">Elimina</button>

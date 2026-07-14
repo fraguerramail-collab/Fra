@@ -64,77 +64,77 @@ FERIALI = {0, 1, 2, 3, 4}
 # resta un segnaposto (vuoto = nessuna skill) finche' l'utente non conferma i
 # codici skill esatti da usare.
 SEED_SHIFT_TYPES = [
-    dict(code="GN", name="Guardia Notte", group="NOTTE", color="#7c5cbf", priority=10,
+    dict(code="GN", name="Guardia Notte", group="NOTTE", color="#7c5cbf",
          time_bands="NOTTE", skill_required="GN", days_set="",
          requires_rest_next_day=True, min_gap_days=2,
          notes="Non esclusivo: nel weekend (ruolo B) coesiste con R2_URG lo stesso giorno.",
          required_by_weekday={d: 1 for d in range(7)}),
-    dict(code="R1N", name="Reperibilità Notte 1", group="NOTTE", color="#9b8ad6", priority=11,
+    dict(code="R1N", name="Reperibilità Notte 1", group="NOTTE", color="#9b8ad6",
          time_bands="NOTTE", skill_required="PR", days_set="",
          required_by_weekday={d: 1 for d in range(7)}),
-    dict(code="R2N", name="Reperibilità Notte 2", group="NOTTE", color="#9b8ad6", priority=12,
+    dict(code="R2N", name="Reperibilità Notte 2", group="NOTTE", color="#9b8ad6",
          time_bands="NOTTE", skill_required="SR", days_set="",
          required_by_weekday={d: 1 for d in range(7)}),
-    dict(code="GG", name="Guardia Giorno", group="GUARDIA", color="#4f7cff", priority=20,
+    dict(code="GG", name="Guardia Giorno", group="GUARDIA", color="#4f7cff",
          time_bands="MATTINA,POMERIGGIO", skill_required="GG", days_set="",
          required_by_weekday={0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 6: 1},
          notes="Il sabato NON ha GG intera: e' spezzata in GG_AM+GG_PM (vedi ruoli weekend)."),
-    dict(code="GG_AM", name="Guardia Giorno Sab. mattina (8-14)", group="GUARDIA", color="#4f7cff", priority=19,
+    dict(code="GG_AM", name="Guardia Giorno Sab. mattina (8-14)", group="GUARDIA", color="#4f7cff",
          time_bands="MATTINA", skill_required="", days_set="5",
          required_by_weekday={5: 1}),
-    dict(code="GG_PM", name="Guardia Giorno Sab. pomeriggio (14-20)", group="GUARDIA", color="#4f7cff", priority=19,
+    dict(code="GG_PM", name="Guardia Giorno Sab. pomeriggio (14-20)", group="GUARDIA", color="#4f7cff",
          time_bands="POMERIGGIO", skill_required="", days_set="5",
          required_by_weekday={5: 1}),
-    dict(code="R1G", name="Reperibilità Giorno 1", group="GUARDIA", color="#7c9bff", priority=21,
+    dict(code="R1G", name="Reperibilità Giorno 1", group="GUARDIA", color="#7c9bff",
          time_bands="POMERIGGIO", skill_required="R1_G", days_set="",
          required_by_weekday={d: 1 for d in range(7)}),
-    dict(code="R2URG", name="Reperibilità Urgenza", group="GUARDIA", color="#7c9bff", priority=22,
+    dict(code="R2URG", name="Reperibilità Urgenza", group="GUARDIA", color="#7c9bff",
          time_bands="MATTINA,POMERIGGIO", skill_required="SR", days_set="5,6",
          is_extra=True,
          notes="Coperta ogni weekend dai ruoli A-D (skill di ruolo secondo Pattern_Weekend). Per un "
                "festivo infrasettimanale (es. 10 agosto), attivala dalla pagina Extra sulla data "
                "specifica: essendo un turno extra funziona su qualsiasi giorno, non solo sab/dom."),
-    dict(code="PO", name="Preospedalizzazione", group="CORSIA", color="#f2994a", priority=35,
+    dict(code="PO", name="Preospedalizzazione", group="CORSIA", color="#f2994a",
          time_bands="MATTINA", skill_required="PO", days_set=",".join(map(str, FERIALI)),
          required_by_weekday={d: 1 for d in FERIALI},
          notes="No weekend. Sospeso in luglio/agosto: usare una soppressione sull'intervallo di date."),
-    dict(code="MODA", name="Corsia A", group="CORSIA", color="#1a9c5c", priority=40,
+    dict(code="MODA", name="Corsia A", group="CORSIA", color="#1a9c5c",
          time_bands="MATTINA,POMERIGGIO", skill_required="MODA", days_set=",".join(map(str, FERIALI)),
          weekly_block=True, block_group="CORSIA"),
-    dict(code="MODB", name="Corsia B", group="CORSIA", color="#1a9c5c", priority=41,
+    dict(code="MODB", name="Corsia B", group="CORSIA", color="#1a9c5c",
          time_bands="MATTINA,POMERIGGIO", skill_required="MODB", days_set=",".join(map(str, FERIALI)),
          weekly_block=True, block_group="CORSIA"),
-    dict(code="BREAST", name="Ambulatorio Breast", group="CORSIA", color="#e05780", priority=30,
+    dict(code="BREAST", name="Ambulatorio Breast", group="CORSIA", color="#e05780",
          time_bands="MATTINA", skill_required="BREAST", days_set="0,2",
          notes="Non richiede assegnazione tramite l'app: chi ha skill BREAST e' protetto da altri "
                "turni lun/mer e riservato (almeno 1 libero) mar/gio/ven, vedi Regole > regole skill."),
-    dict(code="MEDIC", name="Ambulatorio Medicazioni", group="AMBULATORIO", color="#f2994a", priority=55,
+    dict(code="MEDIC", name="Ambulatorio Medicazioni", group="AMBULATORIO", color="#f2994a",
          time_bands="MATTINA", skill_required="MED", days_set="0,2,4",
          required_by_weekday={0: 1, 2: 1, 4: 1}),
-    dict(code="VISLUN", name="Visite (Lunedì)", group="AMBULATORIO", color="#f2994a", priority=56,
+    dict(code="VISLUN", name="Visite (Lunedì)", group="AMBULATORIO", color="#f2994a",
          time_bands="MATTINA", skill_required="VIS", days_set="0",
          required_by_weekday={0: 1}),
-    dict(code="VISGIO", name="Visite (Giovedì)", group="AMBULATORIO", color="#f2994a", priority=57,
+    dict(code="VISGIO", name="Visite (Giovedì)", group="AMBULATORIO", color="#f2994a",
          time_bands="MATTINA", skill_required="VIS", days_set="3",
          required_by_weekday={3: 1}),
-    dict(code="CHIR", name="Chirurgia Ambulatoriale", group="AMBULATORIO", color="#f2994a", priority=58,
+    dict(code="CHIR", name="Chirurgia Ambulatoriale", group="AMBULATORIO", color="#f2994a",
          time_bands="POMERIGGIO", skill_required="CHIR", days_set="0",
          required_by_weekday={0: 1},
          notes="Da confermare chi e' abilitato (nota del reparto)."),
-    dict(code="PROCT", name="Ambulatorio Proctologia", group="AMBULATORIO", color="#f2994a", priority=59,
+    dict(code="PROCT", name="Ambulatorio Proctologia", group="AMBULATORIO", color="#f2994a",
          time_bands="MATTINA", skill_required="PROCTO", days_set="1,3",
          required_by_weekday={1: 1, 3: 1}),
-    dict(code="GOMSUP", name="GOM Superiore", group="GOM", color="#b5750f", priority=60,
+    dict(code="GOMSUP", name="GOM Superiore", group="GOM", color="#b5750f",
          time_bands="MATTINA", skill_required="GOM_SUP", days_set="4",
          required_by_weekday={4: 1},
          notes="Giorno da confermare (nota del reparto)."),
-    dict(code="GOMINF", name="GOM Inferiore", group="GOM", color="#b5750f", priority=61,
+    dict(code="GOMINF", name="GOM Inferiore", group="GOM", color="#b5750f",
          time_bands="POMERIGGIO", skill_required="GOM_INF", days_set="2,3",
          required_by_weekday={2: 1, 3: 1},
          notes="Giorno da confermare (nota del reparto)."),
-    dict(code="CDP", name="CDP", group="EXTRA", color="#999999", priority=90,
+    dict(code="CDP", name="CDP", group="EXTRA", color="#999999",
          time_bands="MATTINA", skill_required="", is_extra=True),
-    dict(code="ABB", name="ABB", group="EXTRA", color="#999999", priority=91,
+    dict(code="ABB", name="ABB", group="EXTRA", color="#999999",
          time_bands="MATTINA,POMERIGGIO", skill_required="", is_extra=True),
 ]
 
@@ -214,7 +214,7 @@ def _build_employee_inputs(employees):
 def _build_shift_type_inputs(shift_types):
     return {
         st.id: ShiftTypeInput(
-            id=st.id, name=st.name, priority=st.priority,
+            id=st.id, name=st.name,
             time_bands=set(parse_csv(st.time_bands)), skill_required=st.skill_required or "",
             days_set=st.days_set_list(), excluded_categories=st.excluded_category_list(),
             exclusive_day=st.exclusive_day, requires_rest_next_day=st.requires_rest_next_day,
@@ -323,7 +323,6 @@ def _read_shift_type_form(st):
     st.name = request.form.get("name", st.name).strip() or st.name
     st.group = request.form.get("group", "").strip() or None
     st.color = request.form.get("color", st.color)
-    st.priority = request.form.get("priority", type=int) or 100
     st.time_bands = ",".join(request.form.getlist("time_bands"))
     st.skill_required = request.form.get("skill_required", "").strip() or None
     days = request.form.getlist("days_set")
@@ -456,6 +455,17 @@ def preferences():
         "preferences.html", preferences=prefs, employees=people, shift_types=types,
         pref_types=PREFERENCE_TYPES, weekday_names=WEEKDAY_NAMES,
     )
+
+
+@bp.route("/preferenze/<int:pref_id>/modifica", methods=["POST"])
+def edit_preference(pref_id):
+    pref = Preference.query.get_or_404(pref_id)
+    pref.weight = request.form.get("weight", type=int)
+    if pref.weight is None:
+        pref.weight = 1
+    db.session.commit()
+    flash("Peso aggiornato.", "success")
+    return redirect(url_for("main.preferences"))
 
 
 @bp.route("/preferenze/<int:pref_id>/elimina", methods=["POST"])

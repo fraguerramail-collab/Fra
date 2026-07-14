@@ -40,8 +40,8 @@ def test_skill_matching_excludes_unqualified():
 
 def test_exclusive_day_blocks_second_shift_same_day():
     employees = [emp(1, "A", skills={"X"})]
-    exclusive = shift(1, "Notte", skill_required="X", exclusive_day=True, priority=1)
-    other = shift(2, "Giorno", skill_required="X", priority=2)
+    exclusive = shift(1, "Notte", skill_required="X", exclusive_day=True)
+    other = shift(2, "Giorno", skill_required="X")
 
     result = run(employees=employees, shift_types=[exclusive, other])
 
@@ -70,8 +70,8 @@ def test_min_gap_days_spacing():
 
 def test_requires_rest_next_day_blocked_without_exception():
     employees = [emp(1, "A", skills={"X"})]
-    night = shift(1, "Notte", skill_required="X", requires_rest_next_day=True, exclusive_day=True, priority=1)
-    day_shift = shift(2, "Giorno", skill_required="X", priority=2)
+    night = shift(1, "Notte", skill_required="X", requires_rest_next_day=True, exclusive_day=True)
+    day_shift = shift(2, "Giorno", skill_required="X")
 
     result = run(employees=employees, shift_types=[night, day_shift])
 
@@ -89,9 +89,9 @@ def test_requires_rest_next_day_exception_saturday_sunday():
     employees = [emp(1, "A", skills={"X"})]
     night = shift(
         1, "Notte", skill_required="X", requires_rest_next_day=True, exclusive_day=True,
-        rest_exception_shift_type_id=2, priority=1, requirements_by_weekday={},
+        rest_exception_shift_type_id=2, requirements_by_weekday={},
     )
-    sunday_shift = shift(2, "Reperibilita", skill_required="X", priority=2, requirements_by_weekday={})
+    sunday_shift = shift(2, "Reperibilita", skill_required="X", requirements_by_weekday={})
 
     weekend_roles = [
         WeekendRoleInput(role_code="A", day="SAB", shift_type_id=1, skill_required="X"),
@@ -111,8 +111,8 @@ def test_weekend_role_same_day_shifts_both_assigned_when_not_exclusive():
     # giorno alla stessa persona (es. Guardia Notte + Reperibilita Urgenza
     # la domenica), purche' nessuno dei due sia "esclusivo".
     employees = [emp(1, "A", skills={"X"})]
-    night = shift(1, "Notte", skill_required="X", priority=1, requirements_by_weekday={})
-    urgenza = shift(2, "Urgenza", skill_required="X", priority=2, requirements_by_weekday={})
+    night = shift(1, "Notte", skill_required="X", requirements_by_weekday={})
+    urgenza = shift(2, "Urgenza", skill_required="X", requirements_by_weekday={})
 
     weekend_roles = [
         WeekendRoleInput(role_code="B", day="DOM", shift_type_id=1, skill_required="X"),
@@ -134,8 +134,8 @@ def test_weekend_role_internal_conflict_warns_instead_of_silently_dropping():
     # tutto coperto dalla stessa persona, o niente) e lo segnala con un
     # avviso esplicito invece di sparire senza spiegazione.
     employees = [emp(1, "A", skills={"X"})]
-    night = shift(1, "Notte", skill_required="X", exclusive_day=True, priority=1, requirements_by_weekday={})
-    urgenza = shift(2, "Urgenza", skill_required="X", priority=2, requirements_by_weekday={})
+    night = shift(1, "Notte", skill_required="X", exclusive_day=True, requirements_by_weekday={})
+    urgenza = shift(2, "Urgenza", skill_required="X", requirements_by_weekday={})
 
     weekend_roles = [
         WeekendRoleInput(role_code="B", day="DOM", shift_type_id=1, skill_required="X"),
@@ -155,8 +155,8 @@ def test_weekend_role_only_blocks_its_own_day_not_the_whole_weekend():
     # GN deve restare assegnabile ordinariamente la domenica, e "Reperibilita"
     # deve restare assegnabile ordinariamente il sabato (2026-01-03 = sabato).
     employees = [emp(1, "A", skills={"X"}), emp(2, "B", skills={"X"})]
-    night = shift(1, "Notte", skill_required="X", priority=1)
-    reperibilita = shift(2, "Reperibilita", skill_required="X", priority=2)
+    night = shift(1, "Notte", skill_required="X")
+    reperibilita = shift(2, "Reperibilita", skill_required="X")
 
     weekend_roles = [
         WeekendRoleInput(role_code="A", day="SAB", shift_type_id=1, skill_required="X"),
@@ -221,8 +221,8 @@ def test_excluded_category_cannot_be_assigned():
 
 def test_prev_month_last_shift_triggers_rest_on_day_one():
     employees = [emp(1, "A", skills={"X"})]
-    night = shift(1, "Notte", skill_required="X", requires_rest_next_day=True, exclusive_day=True, priority=1)
-    day_shift = shift(2, "Giorno", skill_required="X", priority=2)
+    night = shift(1, "Notte", skill_required="X", requires_rest_next_day=True, exclusive_day=True)
+    day_shift = shift(2, "Giorno", skill_required="X")
 
     result = run(
         employees=employees, shift_types=[night, day_shift],

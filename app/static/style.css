@@ -214,6 +214,23 @@ select.status-preferred_off { background: #fdf1de; }
 }
 .empty-cell { color: var(--muted); }
 
+.weight-bar {
+  display: inline-block;
+  width: 60px;
+  height: 8px;
+  background: #e3e5eb;
+  border-radius: 4px;
+  overflow: hidden;
+  vertical-align: middle;
+  margin-right: 0.4rem;
+}
+.weight-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 4px;
+}
+
 .table-compact { font-size: 0.76rem; }
 .table-compact th, .table-compact td { padding: 0.15rem 0.3rem; }
 .table-compact .cell-slot { min-width: 62px; }

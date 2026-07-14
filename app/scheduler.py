@@ -59,7 +59,6 @@ class EmployeeInput:
 class ShiftTypeInput:
     id: int
     name: str
-    priority: int = 100
     time_bands: set = field(default_factory=set)
     skill_required: str = ""
     days_set: set = field(default_factory=set)

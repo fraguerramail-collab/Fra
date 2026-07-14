@@ -64,7 +64,6 @@ class ShiftType(db.Model):
     group = db.Column(db.String(40), nullable=True)  # NOTTE, GUARDIA, CORSIA, AMBULATORIO, EXTRA, EXTRA_RN, SEDE...
     color = db.Column(db.String(7), nullable=False, default="#4f7cff")
     sort_order = db.Column(db.Integer, nullable=False, default=0)
-    priority = db.Column(db.Integer, nullable=False, default=100)  # ordine di assegnazione: piu' basso = prima
 
     time_bands = db.Column(db.String(60), nullable=True)  # CSV tra TIME_BANDS
     skill_required = db.Column(db.String(120), nullable=True)  # "PR|SR"
