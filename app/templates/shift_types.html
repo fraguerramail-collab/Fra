@@ -17,7 +17,7 @@
 </div>
 
 {% for st in shift_types %}
-<div class="card table-scroll">
+<div class="card">
   <form method="post" action="{{ url_for('main.edit_shift_type', shift_type_id=st.id) }}">
     <div class="save-bar">
       <span class="pill" style="background: {{ st.color }}">{{ st.code }}</span>

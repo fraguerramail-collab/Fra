@@ -108,7 +108,7 @@ th, td {
 
 th { background: #f0f2f8; }
 
-.table-scroll { overflow-x: auto; }
+.table-scroll { overflow: auto; max-height: 75vh; }
 .table-scroll table th:first-child,
 .table-scroll table td:first-child {
   position: sticky;
@@ -116,7 +116,13 @@ th { background: #f0f2f8; }
   background: var(--card);
   z-index: 1;
 }
-.table-scroll table th:first-child { background: #f0f2f8; z-index: 2; }
+.table-scroll table thead th {
+  position: sticky;
+  top: 0;
+  background: #f0f2f8;
+  z-index: 2;
+}
+.table-scroll table thead th:first-child { z-index: 3; }
 
 label {
   display: inline-block;
