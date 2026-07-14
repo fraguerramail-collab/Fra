@@ -57,6 +57,31 @@ def add_profile(instance_path, name):
         return profile
 
 
+def rename_profile(instance_path, slug, new_name):
+    with _lock:
+        profiles = load_profiles(instance_path)
+        for p in profiles:
+            if p["slug"] == slug:
+                p["name"] = new_name.strip()
+                save_profiles(instance_path, profiles)
+                return p
+        return None
+
+
+def delete_profile(instance_path, slug):
+    with _lock:
+        profiles = load_profiles(instance_path)
+        remaining = [p for p in profiles if p["slug"] != slug]
+        if len(remaining) == len(profiles):
+            return False
+        save_profiles(instance_path, remaining)
+        for suffix in ("", "-journal", "-wal", "-shm"):
+            db_path = os.path.join(instance_path, f"data_{slug}.db{suffix}")
+            if os.path.exists(db_path):
+                os.remove(db_path)
+        return True
+
+
 def ensure_default_profile(instance_path, default_name="Reparto 1"):
     with _lock:
         profiles = load_profiles(instance_path)
