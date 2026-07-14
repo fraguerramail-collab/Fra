@@ -219,7 +219,8 @@ def _build_shift_type_inputs(shift_types):
             days_set=st.days_set_list(), excluded_categories=st.excluded_category_list(),
             exclusive_day=st.exclusive_day, requires_rest_next_day=st.requires_rest_next_day,
             rest_exception_shift_type_id=st.rest_exception_shift_type_id, min_gap_days=st.min_gap_days,
-            weekly_block=st.weekly_block, block_group=st.block_group, is_extra=st.is_extra,
+            weekly_block=st.weekly_block, weekly_block_strictness=st.weekly_block_strictness,
+            block_group=st.block_group, is_extra=st.is_extra,
             balance_pool=st.balance_pool,
             requirements_by_weekday={r.weekday: r.required_staff for r in st.requirements},
         )
@@ -334,6 +335,9 @@ def _read_shift_type_form(st):
     st.rest_exception_shift_type_id = rest_exc or None
     st.min_gap_days = request.form.get("min_gap_days", type=int) or 0
     st.weekly_block = request.form.get("weekly_block") == "on"
+    st.weekly_block_strictness = request.form.get("weekly_block_strictness", type=int)
+    if st.weekly_block_strictness is None:
+        st.weekly_block_strictness = 10
     st.block_group = request.form.get("block_group", "").strip() or None
     st.is_extra = request.form.get("is_extra") == "on"
     st.balance_pool = request.form.get("balance_pool", "").strip() or None

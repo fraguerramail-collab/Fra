@@ -68,7 +68,18 @@
 
     <div class="toolbar">
       <label><input type="checkbox" name="weekly_block" {% if st.weekly_block %}checked{% endif %}> Assegnato per l'intera settimana (es. corsia)</label>
+      <label>Rigore blocco
+        <input type="range" name="weekly_block_strictness" min="0" max="10" step="1"
+               value="{{ st.weekly_block_strictness }}" oninput="this.nextElementSibling.textContent = this.value">
+        <output>{{ st.weekly_block_strictness }}</output>/10
+      </label>
       <label>Gruppo equità settimanale <input type="text" name="block_group" value="{{ st.block_group or '' }}" placeholder="es. CORSIA" style="width:8rem"></label>
+    </div>
+    <div class="toolbar">
+      <small>Rigore blocco: 10 = ferrea (sempre la stessa persona tutta la settimana, come oggi) &middot;
+      valori piu' bassi permettono al risolutore di spostare la persona su un altro turno in un singolo
+      giorno della settimana se serve altrove (es. per una skill scoperta), con un costo che cresce con il
+      valore &middot; 0 = nessuna preferenza a restare sul blocco (massima liberta').</small>
     </div>
 
     <div class="toolbar">

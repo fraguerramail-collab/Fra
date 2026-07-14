@@ -189,6 +189,47 @@ def test_weekly_block_same_employee_all_week():
         assert len(employees_in_week) == 1
 
 
+def test_weekly_block_strictness_10_is_rigid_even_at_the_cost_of_a_shortfall():
+    employees = [
+        emp(1, "A", skills={"CORSIA", "URGENTE"}),
+        emp(2, "B", skills=set()),
+    ]
+    corsia = shift(
+        1, "Corsia", skill_required="CORSIA", weekly_block=True, weekly_block_strictness=10,
+        exclusive_day=True, days_set={0, 1, 2, 3, 4}, requirements_by_weekday={},
+    )
+    urgente = shift(2, "Urgente", skill_required="URGENTE", requirements_by_weekday={})
+
+    # Solo A ha le skill per entrambe: con il blocco rigido non puo' fare la
+    # corsia (tutta la settimana) e anche Urgente lo stesso giorno, quindi
+    # qualcosa resta scoperto, indipendentemente da cosa il risolutore scelga
+    # di sacrificare.
+    result = run(employees=employees, shift_types=[corsia, urgente], extra_activations={7: [2]})
+
+    assert result.warnings
+
+
+def test_weekly_block_strictness_0_frees_up_the_owner_for_another_shift():
+    employees = [
+        emp(1, "A", skills={"CORSIA", "URGENTE"}),
+        emp(2, "B", skills=set()),
+    ]
+    corsia = shift(
+        1, "Corsia", skill_required="CORSIA", weekly_block=True, weekly_block_strictness=0,
+        exclusive_day=True, days_set={0, 1, 2, 3, 4}, requirements_by_weekday={},
+    )
+    urgente = shift(2, "Urgente", skill_required="URGENTE", requirements_by_weekday={})
+
+    result = run(employees=employees, shift_types=[corsia, urgente], extra_activations={7: [2]})
+
+    # a rigore 0 il costo di deviare e' zero: il risolutore copre sempre Urgente
+    # (evita il forte SHORTFALL_PENALTY), senza pero' alcun obbligo di tenere A
+    # sulla corsia negli altri giorni della settimana (nessuna preferenza in tal senso).
+    assignments_by_shift = {(a["shift_type_id"], a["day"]): a["employee_id"] for a in result.assignments}
+    assert assignments_by_shift.get((2, 7)) == 1  # A copre Urgente il 7 gennaio (mercoledi')
+    assert not result.warnings
+
+
 def test_extra_shift_only_assigned_when_activated():
     employees = [emp(1, "A", skills={"X"})]
     extra = shift(1, "Extra", skill_required="X", is_extra=True, requirements_by_weekday={})

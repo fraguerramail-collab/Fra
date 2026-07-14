@@ -76,6 +76,7 @@ class ShiftType(db.Model):
     min_gap_days = db.Column(db.Integer, nullable=False, default=0)  # distanza minima tra due occorrenze stesso turno
 
     weekly_block = db.Column(db.Boolean, nullable=False, default=False)  # assegnato per settimana intera (corsia)
+    weekly_block_strictness = db.Column(db.Integer, nullable=False, default=10)  # 0=flessibile .. 10=ferrea
     block_group = db.Column(db.String(40), nullable=True)  # raggruppa piu' turni weekly_block per l'equita'
 
     is_extra = db.Column(db.Boolean, nullable=False, default=False)  # attivabile solo su date specifiche

@@ -43,6 +43,7 @@ SHORTFALL_PENALTY = 1_000_000
 WEEKEND_FAIRNESS_WEIGHT = 200
 FAIRNESS_WEIGHT = 50
 MAX_MESE_PENALTY = 5_000
+BLOCK_DEVIATION_UNIT_WEIGHT = 300
 SOLVER_TIME_LIMIT_SECONDS = 30
 
 
@@ -68,6 +69,7 @@ class ShiftTypeInput:
     rest_exception_shift_type_id: int | None = None
     min_gap_days: int = 0
     weekly_block: bool = False
+    weekly_block_strictness: int = 10
     block_group: str | None = None
     is_extra: bool = False
     balance_pool: str | None = None
@@ -316,7 +318,15 @@ def generate_schedule(
                 block_vars.append(y)
                 for dd in valid_days[1:]:
                     x_other = new_x(emp, shift_type.id, dd)
-                    model.Add(x_other == y)
+                    if shift_type.weekly_block_strictness >= 10:
+                        model.Add(x_other == y)
+                    else:
+                        mismatch = model.NewBoolVar(f"blockdev_e{emp.id}_s{shift_type.id}_d{dd}")
+                        model.Add(mismatch >= y - x_other)
+                        model.Add(mismatch >= x_other - y)
+                        weight = BLOCK_DEVIATION_UNIT_WEIGHT * shift_type.weekly_block_strictness
+                        if weight > 0:
+                            objective_terms.append(weight * mismatch)
 
             model.Add(sum(block_vars) <= 1)
             objective_terms.append(SHORTFALL_PENALTY * (1 - sum(block_vars)))
