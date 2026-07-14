@@ -5,6 +5,7 @@
 
 import os
 import threading
+from urllib.parse import urlencode
 
 from flask import Flask, redirect, render_template_string, request
 
@@ -41,12 +42,15 @@ PICKER_TEMPLATE = """
   button { background: #4f7cff; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 6px;
            cursor: pointer; }
   button.danger { background: #e5484d; }
+  .flash-ok { background: #e3f7ec; color: #1a9c5c; font-weight: 700; padding: 0.7rem 1rem;
+          border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid #1a9c5c; }
 </style>
 </head>
 <body>
 <div class="container">
   <h1>Scegli il reparto</h1>
   <p>Ogni reparto ha turni, dipendenti e regole propri, completamente separati dagli altri.</p>
+  {% if msg %}<div class="flash-ok">✓ {{ msg }}</div>{% endif %}
   {% for p in profiles %}
   <div class="card profile-row">
     <a class="profile-link" href="/p/{{ p.slug }}/">{{ p.name }}</a>
@@ -80,7 +84,7 @@ def create_root_app(instance_path, profile_apps_cache):
     @root.route("/")
     def picker():
         profiles = load_profiles(instance_path)
-        return render_template_string(PICKER_TEMPLATE, profiles=profiles)
+        return render_template_string(PICKER_TEMPLATE, profiles=profiles, msg=request.args.get("msg"))
 
     @root.route("/profili", methods=["POST"])
     def create_profile():
@@ -96,13 +100,16 @@ def create_root_app(instance_path, profile_apps_cache):
         if name:
             rename_profile(instance_path, slug, name)
             profile_apps_cache.pop(slug, None)
+            return redirect("/?" + urlencode({"msg": f"Reparto rinominato in '{name}'."}))
         return redirect("/")
 
     @root.route("/profili/<slug>/elimina", methods=["POST"])
     def delete_profile_route(slug):
+        profile = get_profile(instance_path, slug)
         delete_profile(instance_path, slug)
         profile_apps_cache.pop(slug, None)
-        return redirect("/")
+        name = profile["name"] if profile else "reparto"
+        return redirect("/?" + urlencode({"msg": f"Reparto '{name}' eliminato."}))
 
     return root
 

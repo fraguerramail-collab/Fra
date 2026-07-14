@@ -19,10 +19,11 @@
 {% for st in shift_types %}
 <div class="card table-scroll">
   <form method="post" action="{{ url_for('main.edit_shift_type', shift_type_id=st.id) }}">
-    <h2>
+    <div class="save-bar">
       <span class="pill" style="background: {{ st.color }}">{{ st.code }}</span>
       <input type="text" name="name" value="{{ st.name }}" style="font-size:1rem">
-    </h2>
+      <button type="submit">✓ Salva</button>
+    </div>
 
     <div class="toolbar">
       <label>Codice <input type="text" name="code" value="{{ st.code }}" style="width:5rem"></label>
@@ -88,7 +89,7 @@
       </tbody>
     </table>
     <br>
-    <button type="submit">Salva</button>
+    <button type="submit">✓ Salva</button>
   </form>
   <form class="inline" method="post" action="{{ url_for('main.delete_shift_type', shift_type_id=st.id) }}" onsubmit="return confirm('Eliminare il turno {{ st.name }}?');">
     <button type="submit" class="danger">Elimina turno</button>
