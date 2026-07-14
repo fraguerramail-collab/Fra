@@ -26,6 +26,8 @@ scoperture (coprire quanto piu' possibile), (2) equita' del carico totale
 tra i dipendenti, (3) equita' dei weekend lavorati, (4) preferenze pesate.
 """
 
+from __future__ import annotations
+
 from calendar import monthrange
 from dataclasses import dataclass, field
 
