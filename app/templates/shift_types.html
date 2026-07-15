@@ -101,6 +101,9 @@
     <br>
     <button type="submit">✓ Salva</button>
   </form>
+  <form class="inline" method="post" action="{{ url_for('main.duplicate_shift_type', shift_type_id=st.id) }}">
+    <button type="submit" class="secondary">⎘ Duplica turno</button>
+  </form>
   <form class="inline" method="post" action="{{ url_for('main.delete_shift_type', shift_type_id=st.id) }}" onsubmit="return confirm('Eliminare il turno {{ st.name }}?');">
     <button type="submit" class="danger">Elimina turno</button>
   </form>

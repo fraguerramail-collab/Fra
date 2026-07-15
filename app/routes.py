@@ -391,6 +391,36 @@ def edit_shift_type(shift_type_id):
     return redirect(url_for("main.shift_types"))
 
 
+@bp.route("/turni/<int:shift_type_id>/duplica", methods=["POST"])
+def duplicate_shift_type(shift_type_id):
+    src = ShiftType.query.get_or_404(shift_type_id)
+
+    base_code = f"{src.code}_COPY"
+    new_code = base_code
+    n = 2
+    while ShiftType.query.filter_by(code=new_code).first():
+        new_code = f"{base_code}{n}"
+        n += 1
+
+    clone = ShiftType(
+        code=new_code, name=f"{src.name} (copia)", group=src.group, color=src.color,
+        sort_order=ShiftType.query.count(),
+        time_bands=src.time_bands, skill_required=src.skill_required, days_set=src.days_set,
+        excluded_categories=src.excluded_categories, exclusive_day=src.exclusive_day,
+        requires_rest_next_day=src.requires_rest_next_day,
+        rest_exception_shift_type_id=src.rest_exception_shift_type_id, min_gap_days=src.min_gap_days,
+        weekly_block=src.weekly_block, weekly_block_strictness=src.weekly_block_strictness,
+        block_group=src.block_group, is_extra=src.is_extra, balance_pool=src.balance_pool,
+    )
+    db.session.add(clone)
+    db.session.flush()
+    for r in src.requirements:
+        db.session.add(ShiftRequirement(shift_type_id=clone.id, weekday=r.weekday, required_staff=r.required_staff))
+    db.session.commit()
+    flash(f"Turno '{src.name}' duplicato come '{clone.name}' (codice {clone.code}) — modificalo qui sotto.", "success")
+    return redirect(url_for("main.shift_types"))
+
+
 @bp.route("/turni/<int:shift_type_id>/elimina", methods=["POST"])
 def delete_shift_type(shift_type_id):
     st = ShiftType.query.get_or_404(shift_type_id)
