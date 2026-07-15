@@ -288,7 +288,7 @@ def employees():
         return redirect(url_for("main.employees"))
 
     people = Employee.query.order_by(Employee.name).all()
-    return render_template("employees.html", employees=people)
+    return render_template("employees.html", employees=people, known_skills=_known_skills())
 
 
 @bp.route("/dipendenti/<int:employee_id>/modifica", methods=["POST"])

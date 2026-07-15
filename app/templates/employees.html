@@ -1,5 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Dipendenti - Gestione Turni{% endblock %}
+
+{% macro skill_picker(selected, known_skills, form_id=None) %}
+<div class="skill-picker">
+  <button type="button" class="skill-picker-toggle">{{ selected|join(', ') if selected else 'Seleziona skill' }} ▾</button>
+  <div class="skill-picker-menu">
+    {% for sk in known_skills %}
+    <label><input type="checkbox" value="{{ sk }}" {% if sk in selected %}checked{% endif %}> {{ sk }}</label>
+    {% endfor %}
+    {% for sk in selected %}
+    {% if sk not in known_skills %}
+    <label><input type="checkbox" value="{{ sk }}" checked> {{ sk }}</label>
+    {% endif %}
+    {% endfor %}
+    <div class="skill-picker-add">
+      <input type="text" class="skill-picker-custom" placeholder="+ nuova skill, Invio per aggiungere">
+    </div>
+  </div>
+  <input type="hidden" name="skills" value="{{ selected|join(',') }}" {% if form_id %}form="{{ form_id }}"{% endif %}>
+</div>
+{% endmacro %}
+
 {% block content %}
 <h1>Dipendenti</h1>
 
@@ -12,7 +33,7 @@
     &nbsp;
     <label>Fascia/categoria<br><input type="text" name="category" placeholder="es. STRUTTURATO, SP"></label>
     &nbsp;
-    <label>Skill (separate da virgola)<br><input type="text" name="skills" placeholder="es. PR,SR,BREAST"></label>
+    <label>Skill<br>{{ skill_picker([], known_skills) }}</label>
     &nbsp;
     <label>Max turni/settimana<br><input type="number" name="max_shifts_per_week" min="1"></label>
     &nbsp;
@@ -32,7 +53,7 @@
         <td><input type="text" name="code" value="{{ emp.code }}" style="width:5rem" form="emp-form-{{ emp.id }}"></td>
         <td><input type="text" name="name" value="{{ emp.name }}" form="emp-form-{{ emp.id }}"></td>
         <td><input type="text" name="category" value="{{ emp.category or '' }}" style="width:7rem" form="emp-form-{{ emp.id }}"></td>
-        <td><input type="text" name="skills" value="{{ emp.skills or '' }}" style="width:22rem" form="emp-form-{{ emp.id }}"></td>
+        <td>{{ skill_picker(emp.skill_list(), known_skills, form_id="emp-form-" ~ emp.id) }}</td>
         <td><input type="checkbox" name="active" {% if emp.active %}checked{% endif %} form="emp-form-{{ emp.id }}"></td>
         <td><input type="number" name="max_shifts_per_week" min="1" value="{{ emp.max_shifts_per_week or '' }}" style="width:4rem" form="emp-form-{{ emp.id }}"></td>
         <td><input type="text" name="notes" value="{{ emp.notes or '' }}" form="emp-form-{{ emp.id }}"></td>
@@ -50,4 +71,69 @@
     </tbody>
   </table>
 </div>
+
+<script>
+document.addEventListener('click', function (e) {
+  var toggle = e.target.closest('.skill-picker-toggle');
+  var insideMenu = e.target.closest('.skill-picker-menu');
+  if (!toggle && !insideMenu) {
+    document.querySelectorAll('.skill-picker-menu.open').forEach(function (m) { m.classList.remove('open'); });
+    return;
+  }
+  if (toggle) {
+    var menu = toggle.nextElementSibling;
+    var wasOpen = menu.classList.contains('open');
+    document.querySelectorAll('.skill-picker-menu.open').forEach(function (m) { m.classList.remove('open'); });
+    if (!wasOpen) {
+      var rect = toggle.getBoundingClientRect();
+      menu.style.top = rect.bottom + 'px';
+      menu.style.left = rect.left + 'px';
+      menu.classList.add('open');
+    }
+  }
+});
+
+document.addEventListener('change', function (e) {
+  if (e.target.matches('.skill-picker-menu input[type=checkbox]')) {
+    syncSkillPicker(e.target.closest('.skill-picker'));
+  }
+});
+
+document.addEventListener('keydown', function (e) {
+  if (e.target.matches('.skill-picker-custom') && e.key === 'Enter') {
+    e.preventDefault();
+    var val = e.target.value.trim().toUpperCase();
+    if (val) {
+      addCustomSkillCheckbox(e.target.closest('.skill-picker'), val);
+      e.target.value = '';
+    }
+  }
+});
+
+function syncSkillPicker(picker) {
+  var checked = Array.prototype.slice.call(picker.querySelectorAll('.skill-picker-menu input[type=checkbox]:checked'))
+    .map(function (cb) { return cb.value; });
+  picker.querySelector('input[type=hidden]').value = checked.join(',');
+  picker.querySelector('.skill-picker-toggle').textContent = (checked.length ? checked.join(', ') : 'Seleziona skill') + ' ▾';
+}
+
+function addCustomSkillCheckbox(picker, val) {
+  var menu = picker.querySelector('.skill-picker-menu');
+  var existingCb = Array.prototype.slice.call(menu.querySelectorAll('input[type=checkbox]'))
+    .filter(function (cb) { return cb.value === val; })[0];
+  if (existingCb) {
+    existingCb.checked = true;
+  } else {
+    var label = document.createElement('label');
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = val;
+    cb.checked = true;
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(' ' + val));
+    menu.insertBefore(label, menu.querySelector('.skill-picker-add'));
+  }
+  syncSkillPicker(picker);
+}
+</script>
 {% endblock %}

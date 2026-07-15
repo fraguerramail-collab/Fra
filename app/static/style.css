@@ -220,6 +220,44 @@ select.status-preferred_off { background: #fdf1de; }
 }
 .empty-cell { color: var(--muted); }
 
+.skill-picker { position: relative; display: inline-block; }
+.skill-picker-toggle {
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 400;
+  text-align: left;
+  min-width: 12rem;
+  max-width: 20rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.skill-picker-toggle:hover { background: #fff; border-color: var(--primary); }
+.skill-picker-menu {
+  display: none;
+  position: fixed;
+  z-index: 50;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem;
+  min-width: 14rem;
+  max-width: 18rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+.skill-picker-menu.open { display: block; }
+.skill-picker-menu label {
+  display: block;
+  margin: 0 0 0.2rem 0;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+.skill-picker-add { margin-top: 0.4rem; border-top: 1px solid var(--border); padding-top: 0.4rem; }
+.skill-picker-add input { width: 100%; }
+
 .weight-bar {
   display: inline-block;
   width: 60px;
