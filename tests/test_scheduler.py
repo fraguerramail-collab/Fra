@@ -230,6 +230,27 @@ def test_weekly_block_strictness_0_frees_up_the_owner_for_another_shift():
     assert not result.warnings
 
 
+def test_skill_by_weekday_overrides_general_skill_on_that_day_only():
+    employees = [
+        emp(1, "A", skills={"SALA2"}),
+        emp(2, "B", skills={"ORTO"}),
+        emp(3, "C", skills={"VASC"}),
+    ]
+    sala2 = shift(
+        1, "Sala 2", skill_required="SALA2", skill_by_weekday={0: "ORTO", 4: "VASC"},
+        days_set={0, 1, 2, 3, 4}, requirements_by_weekday={d: 1 for d in range(5)},
+    )
+
+    result = run(employees=employees, shift_types=[sala2])
+    assignments_by_day = {a["day"]: a["employee_id"] for a in result.assignments}
+
+    # gennaio 2026: 5=lunedi', 6=martedi', 9=venerdi'
+    assert assignments_by_day.get(5) == 2  # lunedi': serve ORTO -> solo B
+    assert assignments_by_day.get(6) == 1  # martedi': skill normale SALA2 -> solo A
+    assert assignments_by_day.get(9) == 3  # venerdi': serve VASC -> solo C
+    assert not result.warnings
+
+
 def test_extra_shift_only_assigned_when_activated():
     employees = [emp(1, "A", skills={"X"})]
     extra = shift(1, "Extra", skill_required="X", is_extra=True, requirements_by_weekday={})

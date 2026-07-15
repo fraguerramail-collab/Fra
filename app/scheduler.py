@@ -62,6 +62,7 @@ class ShiftTypeInput:
     name: str
     time_bands: set = field(default_factory=set)
     skill_required: str = ""
+    skill_by_weekday: dict = field(default_factory=dict)  # weekday -> skill_required specifica (sovrascrive quella generale)
     days_set: set = field(default_factory=set)
     excluded_categories: set = field(default_factory=set)
     exclusive_day: bool = False
@@ -300,7 +301,8 @@ def generate_schedule(
             eligible_ids = None
             for dd in valid_days:
                 weekday_ = weekday_of(dd)
-                day_ids = {e.id for e in employees if eligible(e, shift_type, dd, weekday_)}
+                skill_override = shift_type.skill_by_weekday.get(weekday_)
+                day_ids = {e.id for e in employees if eligible(e, shift_type, dd, weekday_, skill_override)}
                 eligible_ids = day_ids if eligible_ids is None else (eligible_ids & day_ids)
 
             if not eligible_ids:
@@ -350,7 +352,8 @@ def generate_schedule(
             if is_suppressed(shift_type.id, day):
                 continue
 
-            candidates = [e for e in employees if eligible(e, shift_type, day, weekday)]
+            skill_override = shift_type.skill_by_weekday.get(weekday)
+            candidates = [e for e in employees if eligible(e, shift_type, day, weekday, skill_override)]
             slot_vars = [new_x(e, shift_type.id, day) for e in candidates]
             if slot_vars:
                 model.Add(sum(slot_vars) <= required)
@@ -365,7 +368,8 @@ def generate_schedule(
             shift_type = shift_types_by_id.get(shift_type_id)
             if shift_type is None:
                 continue
-            candidates = [e for e in employees if eligible(e, shift_type, day, weekday)]
+            skill_override = shift_type.skill_by_weekday.get(weekday)
+            candidates = [e for e in employees if eligible(e, shift_type, day, weekday, skill_override)]
             slot_vars = [new_x(e, shift_type.id, day) for e in candidates]
             if slot_vars:
                 model.Add(sum(slot_vars) <= 1)

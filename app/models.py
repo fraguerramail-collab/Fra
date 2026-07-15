@@ -102,6 +102,12 @@ class ShiftType(db.Model):
                 return r.required_staff
         return 0
 
+    def skill_override_for_weekday(self, weekday):
+        for r in self.requirements:
+            if r.weekday == weekday:
+                return r.skill_override or ""
+        return ""
+
 
 class ShiftRequirement(db.Model):
     """Personale richiesto per un turno in un giorno della settimana (0=Lun). Non usato per i turni weekend a ruoli o extra."""
@@ -113,6 +119,7 @@ class ShiftRequirement(db.Model):
     shift_type_id = db.Column(db.Integer, db.ForeignKey("shift_type.id"), nullable=False)
     weekday = db.Column(db.Integer, nullable=False)
     required_staff = db.Column(db.Integer, nullable=False, default=0)
+    skill_override = db.Column(db.String(120), nullable=True)  # se valorizzata, sostituisce skill_required SOLO quel giorno
 
     shift_type = db.relationship("ShiftType", back_populates="requirements")
 

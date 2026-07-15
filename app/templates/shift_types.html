@@ -88,12 +88,21 @@
     </div>
 
     <h3>Personale richiesto per giorno della settimana (non usato per turni "corsia" o "extra"; ignorato sab/dom se il turno fa parte di un ruolo weekend)</h3>
-    <table style="max-width:700px">
-      <thead><tr>{% for wd in weekday_names %}<th>{{ wd[:3] }}</th>{% endfor %}</tr></thead>
+    <table style="max-width:980px">
+      <thead><tr><th></th>{% for wd in weekday_names %}<th>{{ wd[:3] }}</th>{% endfor %}</tr></thead>
       <tbody>
         <tr>
+          <td><small>Persone</small></td>
           {% for weekday in range(7) %}
           <td><input type="number" min="0" style="width:4rem" name="required_{{ weekday }}" value="{{ st.requirement_for_weekday(weekday) }}"></td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td><small>Skill giorno</small></td>
+          {% for weekday in range(7) %}
+          <td><input type="text" style="width:6rem" name="skill_override_{{ weekday }}"
+                     value="{{ st.skill_override_for_weekday(weekday) }}" placeholder="skill normale"
+                     title="Skill richiesta solo per questo giorno (vuoto = usa quella generale sopra)"></td>
           {% endfor %}
         </tr>
       </tbody>

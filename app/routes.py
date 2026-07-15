@@ -216,6 +216,7 @@ def _build_shift_type_inputs(shift_types):
         st.id: ShiftTypeInput(
             id=st.id, name=st.name,
             time_bands=set(parse_csv(st.time_bands)), skill_required=st.skill_required or "",
+            skill_by_weekday={r.weekday: r.skill_override for r in st.requirements if r.skill_override},
             days_set=st.days_set_list(), excluded_categories=st.excluded_category_list(),
             exclusive_day=st.exclusive_day, requires_rest_next_day=st.requires_rest_next_day,
             rest_exception_shift_type_id=st.rest_exception_shift_type_id, min_gap_days=st.min_gap_days,
@@ -381,10 +382,16 @@ def edit_shift_type(shift_type_id):
     req_by_wd = {r.weekday: r for r in st.requirements}
     for weekday in range(7):
         value = request.form.get(f"required_{weekday}", type=int) or 0
+        skill_override = request.form.get(f"skill_override_{weekday}", "").strip() or None
         if weekday in req_by_wd:
             req_by_wd[weekday].required_staff = value
+            req_by_wd[weekday].skill_override = skill_override
         else:
-            db.session.add(ShiftRequirement(shift_type_id=st.id, weekday=weekday, required_staff=value))
+            db.session.add(
+                ShiftRequirement(
+                    shift_type_id=st.id, weekday=weekday, required_staff=value, skill_override=skill_override,
+                )
+            )
 
     db.session.commit()
     flash(f"Turno '{st.name}' aggiornato.", "success")
@@ -415,7 +422,12 @@ def duplicate_shift_type(shift_type_id):
     db.session.add(clone)
     db.session.flush()
     for r in src.requirements:
-        db.session.add(ShiftRequirement(shift_type_id=clone.id, weekday=r.weekday, required_staff=r.required_staff))
+        db.session.add(
+            ShiftRequirement(
+                shift_type_id=clone.id, weekday=r.weekday, required_staff=r.required_staff,
+                skill_override=r.skill_override,
+            )
+        )
     db.session.commit()
     flash(f"Turno '{src.name}' duplicato come '{clone.name}' (codice {clone.code}) — modificalo qui sotto.", "success")
     return redirect(url_for("main.shift_types"))
