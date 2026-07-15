@@ -30,6 +30,40 @@ def _add_missing_columns():
                 conn.execute(sa.text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {col_type}{default_sql}'))
 
 
+def _drop_orphaned_not_null_columns():
+    """Rimuove dalle tabelle esistenti le colonne presenti nel file .db ma
+    non piu' definite nei modelli (es. un campo eliminato in un aggiornamento
+    dell'app), quando sono NOT NULL senza un default: altrimenti ogni nuovo
+    inserimento fallirebbe perche' quella colonna non riceve mai un valore."""
+    inspector = sa.inspect(db.engine)
+    existing_tables = set(inspector.get_table_names())
+    for table in db.metadata.tables.values():
+        if table.name not in existing_tables:
+            continue
+        model_cols = {c.name for c in table.columns}
+        for col in inspector.get_columns(table.name):
+            if col["name"] in model_cols or col["nullable"] or col["default"] is not None:
+                continue
+            try:
+                with db.engine.begin() as conn:
+                    conn.execute(sa.text(f'ALTER TABLE "{table.name}" DROP COLUMN "{col["name"]}"'))
+            except Exception:
+                # SQLite troppo vecchio per DROP COLUMN (serve 3.35+): ricrea la
+                # tabella da zero secondo lo schema attuale, copiando i dati.
+                _rebuild_table(table)
+
+
+def _rebuild_table(table):
+    tmp_name = f"{table.name}__rebuild"
+    keep_cols = [c.name for c in table.columns]
+    cols_csv = ", ".join(f'"{c}"' for c in keep_cols)
+    with db.engine.begin() as conn:
+        conn.execute(sa.text(f'ALTER TABLE "{table.name}" RENAME TO "{tmp_name}"'))
+        table.create(conn)
+        conn.execute(sa.text(f'INSERT INTO "{table.name}" ({cols_csv}) SELECT {cols_csv} FROM "{tmp_name}"'))
+        conn.execute(sa.text(f'DROP TABLE "{tmp_name}"'))
+
+
 def create_app(test_config=None, profile_slug="default", profile_name=None, instance_path=None):
     """Crea un'app Flask isolata su un proprio database SQLite.
 
@@ -59,5 +93,6 @@ def create_app(test_config=None, profile_slug="default", profile_name=None, inst
     with app.app_context():
         db.create_all()
         _add_missing_columns()
+        _drop_orphaned_not_null_columns()
 
     return app
