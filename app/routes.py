@@ -839,7 +839,19 @@ def generate():
     )
 
     Assignment.query.filter_by(year=year, month=month, auto_generated=True).delete()
+    existing_keys = {
+        (a.employee_id, a.shift_type_id, a.day)
+        for a in Assignment.query.filter_by(year=year, month=month).all()
+    }
+    skipped_duplicates = 0
     for a in result.assignments:
+        key = (a["employee_id"], a["shift_type_id"], a["day"])
+        if key in existing_keys:
+            # coincide con un'assegnazione manuale gia' presente per la stessa
+            # persona/turno/giorno: non reinserirla (violerebbe l'unicita').
+            skipped_duplicates += 1
+            continue
+        existing_keys.add(key)
         db.session.add(
             Assignment(
                 employee_id=a["employee_id"], shift_type_id=a["shift_type_id"], year=year, month=month,
@@ -847,6 +859,12 @@ def generate():
             )
         )
     db.session.commit()
+
+    if skipped_duplicates:
+        flash(
+            f"{skipped_duplicates} assegnazione/i generate coincidevano con turni gia' inseriti "
+            "a mano per la stessa persona/turno/giorno: lasciate quelle manuali.", "warning",
+        )
 
     if result.warnings:
         flash(f"Turni generati con {len(result.warnings)} avviso/i:", "warning")
