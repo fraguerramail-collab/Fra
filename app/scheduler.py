@@ -282,7 +282,7 @@ def generate_schedule(
             continue
         weeks.setdefault(week_index(day), []).append(day)
 
-    block_slots = []  # (shift_type, first_day, block_vars)
+    block_slots = []  # (shift_type, valid_days, required, eligible_ids)
     for wk, days_in_week in sorted(weeks.items()):
         for shift_type in weekly_types:
             if shift_type.days_set:
@@ -313,6 +313,7 @@ def generate_schedule(
 
             by_id = {e.id: e for e in employees}
             first_day = valid_days[0]
+            required = max([1] + [shift_type.requirements_by_weekday.get(weekday_of(dd), 0) for dd in valid_days])
             block_vars = []
             for emp_id in eligible_ids:
                 emp = by_id[emp_id]
@@ -330,9 +331,12 @@ def generate_schedule(
                         if weight > 0:
                             objective_terms.append(weight * mismatch)
 
-            model.Add(sum(block_vars) <= 1)
-            objective_terms.append(SHORTFALL_PENALTY * (1 - sum(block_vars)))
-            block_slots.append((shift_type, first_day, block_vars))
+            # fino a 'required' titolari distinti possono "possedere" la settimana in
+            # parallelo (es. 2 posizioni di corsia); ciascuno resta comunque legato
+            # individualmente a tutta la settimana secondo il rigore configurato sopra.
+            model.Add(sum(block_vars) <= required)
+            objective_terms.append(SHORTFALL_PENALTY * (required - sum(block_vars)))
+            block_slots.append((shift_type, valid_days, required, eligible_ids))
 
     # ------------------------------------------------------- turni giornalieri ordinari
     ordinary_types = [st for st in shift_types if not st.weekly_block and not st.is_extra]
@@ -572,13 +576,17 @@ def generate_schedule(
                 f"manca personale disponibile per l'intero weekend)."
             )
 
-    for shift_type, first_day, block_vars in block_slots:
-        actual = sum(solver.Value(v) for v in block_vars) if solved_ok else 0
-        if actual < 1:
-            warnings.append(
-                f"Settimana giorno {first_day}: turno '{shift_type.name}' a blocco settimanale non assegnato "
-                f"a nessuno."
+    for shift_type, valid_days, required, eligible_ids in block_slots:
+        for dd in valid_days:
+            actual = (
+                sum(solver.Value(x[(emp_id, shift_type.id, dd)]) for emp_id in eligible_ids)
+                if solved_ok else 0
             )
+            if actual < required:
+                warnings.append(
+                    f"Giorno {dd} ({WEEKDAY_NAMES[weekday_of(dd)]}): turno '{shift_type.name}' "
+                    f"(blocco settimanale) coperto {actual}/{required} persone."
+                )
 
     for shift_type, day, weekday, required, slot_vars in ordinary_slots:
         actual = sum(solver.Value(v) for v in slot_vars) if solved_ok else 0

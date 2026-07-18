@@ -189,6 +189,34 @@ def test_weekly_block_same_employee_all_week():
         assert len(employees_in_week) == 1
 
 
+def test_weekly_block_supports_more_than_one_concurrent_person():
+    employees = [
+        emp(1, "A", skills={"RIA"}), emp(2, "B", skills={"RIA"}),
+        emp(3, "C", skills={"RIA"}), emp(4, "D", skills={"RIA"}),
+    ]
+    ria = ShiftTypeInput(
+        id=1, name="Rianimazione 2 Mattina", skill_required="RIA", weekly_block=True,
+        days_set={0, 1, 2, 3, 4}, requirements_by_weekday={d: 2 for d in range(5)},
+    )
+
+    result = run(employees=employees, shift_types=[ria])
+
+    first_weekday, _ = monthrange(2026, 1)
+    by_week_employees = {}
+    by_day_count = {}
+    for a in result.assignments:
+        week = (a["day"] - 1 + first_weekday) // 7
+        by_week_employees.setdefault(week, set()).add(a["employee_id"])
+        by_day_count[a["day"]] = by_day_count.get(a["day"], 0) + 1
+
+    # ogni settimana coperta da 2 titolari distinti, ed entrambi presenti ogni giorno feriale
+    for employees_in_week in by_week_employees.values():
+        assert len(employees_in_week) == 2
+    for day, count in by_day_count.items():
+        assert count == 2
+    assert not result.warnings
+
+
 def test_weekly_block_strictness_10_is_rigid_even_at_the_cost_of_a_shortfall():
     employees = [
         emp(1, "A", skills={"CORSIA", "URGENTE"}),
@@ -224,10 +252,12 @@ def test_weekly_block_strictness_0_frees_up_the_owner_for_another_shift():
 
     # a rigore 0 il costo di deviare e' zero: il risolutore copre sempre Urgente
     # (evita il forte SHORTFALL_PENALTY), senza pero' alcun obbligo di tenere A
-    # sulla corsia negli altri giorni della settimana (nessuna preferenza in tal senso).
+    # sulla corsia negli altri giorni della settimana (nessuna preferenza in tal senso);
+    # i giorni di corsia lasciati scoperti da questa liberta' devono comparire come avviso
+    # (prima passavano inosservati: e' proprio il bug segnalato dall'utente).
     assignments_by_shift = {(a["shift_type_id"], a["day"]): a["employee_id"] for a in result.assignments}
     assert assignments_by_shift.get((2, 7)) == 1  # A copre Urgente il 7 gennaio (mercoledi')
-    assert not result.warnings
+    assert any("Corsia" in w and "blocco settimanale" in w for w in result.warnings)
 
 
 def test_skill_by_weekday_overrides_general_skill_on_that_day_only():
