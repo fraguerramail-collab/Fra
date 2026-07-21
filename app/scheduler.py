@@ -275,11 +275,12 @@ def generate_schedule(
             role_slots.append((role_code, sab_day, dom_day, role_vars))
 
     # ---------------------------------------------------- turni a blocco settimanale
+    # I giorni della settimana coperti dipendono dal 'days_set' del singolo turno
+    # (filtrato piu' sotto): un turno senza days_set copre tutti i 7 giorni, uno con
+    # days_set sui soli feriali (es. corsia) resta automaticamente lun-ven.
     weekly_types = [st for st in shift_types if st.weekly_block]
     weeks = {}
     for day in range(1, num_days + 1):
-        if weekday_of(day) >= 5:  # solo giorni feriali per i blocchi settimanali
-            continue
         weeks.setdefault(week_index(day), []).append(day)
 
     block_slots = []  # (shift_type, valid_days, required, eligible_ids)

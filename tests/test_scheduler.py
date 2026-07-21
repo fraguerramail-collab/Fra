@@ -189,6 +189,26 @@ def test_weekly_block_same_employee_all_week():
         assert len(employees_in_week) == 1
 
 
+def test_weekly_block_without_days_set_covers_the_whole_week_including_weekend():
+    employees = [emp(1, "A", skills=set()), emp(2, "B", skills=set())]
+    ria_fisso = ShiftTypeInput(
+        id=1, name="Rianimazione (fisso)", weekly_block=True, requirements_by_weekday={},
+    )  # nessun days_set -> tutti e 7 i giorni
+
+    result = run(employees=employees, shift_types=[ria_fisso], max_consecutive_work_days=7)
+
+    first_weekday, num_days = monthrange(2026, 1)
+    assigned_days = {a["day"] for a in result.assignments}
+    assert assigned_days == set(range(1, num_days + 1))  # coperto anche sab/dom, nessun buco
+
+    by_week_employee = {}
+    for a in result.assignments:
+        week = (a["day"] - 1 + first_weekday) // 7
+        by_week_employee.setdefault(week, set()).add(a["employee_id"])
+    for employees_in_week in by_week_employee.values():
+        assert len(employees_in_week) == 1  # stessa persona tutta la settimana, weekend compreso
+
+
 def test_weekly_block_supports_more_than_one_concurrent_person():
     employees = [
         emp(1, "A", skills={"RIA"}), emp(2, "B", skills={"RIA"}),
