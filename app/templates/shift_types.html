@@ -27,7 +27,12 @@
       <input type="hidden" name="direction" value="down">
       <button type="submit" class="secondary" title="Sposta giù" {% if loop.last %}disabled{% endif %}>▼</button>
     </form>
-    <small style="color:var(--muted)">posizione {{ loop.index }}/{{ shift_types|length }}</small>
+    <small style="color:var(--muted)">posizione</small>
+    <form class="inline" method="post" action="{{ url_for('main.reorder_shift_type', shift_type_id=st.id) }}">
+      <input type="number" name="position" min="1" max="{{ shift_types|length }}" value="{{ loop.index }}" style="width:3.5rem">
+      <button type="submit" class="secondary">Vai</button>
+    </form>
+    <small style="color:var(--muted)">/ {{ shift_types|length }}</small>
   </div>
   <form method="post" action="{{ url_for('main.edit_shift_type', shift_type_id=st.id) }}">
     <div class="save-bar">

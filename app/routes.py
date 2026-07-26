@@ -459,6 +459,21 @@ def move_shift_type(shift_type_id):
     return redirect(url_for("main.shift_types"))
 
 
+@bp.route("/turni/<int:shift_type_id>/riordina", methods=["POST"])
+def reorder_shift_type(shift_type_id):
+    target_pos = request.form.get("position", type=int)
+    types = ShiftType.query.order_by(ShiftType.sort_order).all()
+    idx = next((i for i, st in enumerate(types) if st.id == shift_type_id), None)
+    if target_pos is not None and idx is not None:
+        item = types.pop(idx)
+        target_idx = max(0, min(len(types), target_pos - 1))
+        types.insert(target_idx, item)
+        for i, st in enumerate(types):
+            st.sort_order = i
+        db.session.commit()
+    return redirect(url_for("main.shift_types"))
+
+
 # ---------------------------------------------------------------- weekend a ruoli
 @bp.route("/weekend", methods=["GET", "POST"])
 def weekend_pattern():
