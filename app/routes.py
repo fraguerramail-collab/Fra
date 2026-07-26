@@ -443,6 +443,22 @@ def delete_shift_type(shift_type_id):
     return redirect(url_for("main.shift_types"))
 
 
+@bp.route("/turni/<int:shift_type_id>/sposta", methods=["POST"])
+def move_shift_type(shift_type_id):
+    direction = request.form.get("direction")
+    types = ShiftType.query.order_by(ShiftType.sort_order).all()
+    idx = next((i for i, st in enumerate(types) if st.id == shift_type_id), None)
+    if idx is not None:
+        swap_idx = idx - 1 if direction == "up" else idx + 1
+        if 0 <= swap_idx < len(types):
+            types[idx].sort_order, types[swap_idx].sort_order = (
+                types[swap_idx].sort_order,
+                types[idx].sort_order,
+            )
+            db.session.commit()
+    return redirect(url_for("main.shift_types"))
+
+
 # ---------------------------------------------------------------- weekend a ruoli
 @bp.route("/weekend", methods=["GET", "POST"])
 def weekend_pattern():

@@ -18,6 +18,17 @@
 
 {% for st in shift_types %}
 <div class="card">
+  <div class="save-bar">
+    <form class="inline" method="post" action="{{ url_for('main.move_shift_type', shift_type_id=st.id) }}">
+      <input type="hidden" name="direction" value="up">
+      <button type="submit" class="secondary" title="Sposta su" {% if loop.first %}disabled{% endif %}>▲</button>
+    </form>
+    <form class="inline" method="post" action="{{ url_for('main.move_shift_type', shift_type_id=st.id) }}">
+      <input type="hidden" name="direction" value="down">
+      <button type="submit" class="secondary" title="Sposta giù" {% if loop.last %}disabled{% endif %}>▼</button>
+    </form>
+    <small style="color:var(--muted)">posizione {{ loop.index }}/{{ shift_types|length }}</small>
+  </div>
   <form method="post" action="{{ url_for('main.edit_shift_type', shift_type_id=st.id) }}">
     <div class="save-bar">
       <span class="pill" style="background: {{ st.color }}">{{ st.code }}</span>

@@ -315,13 +315,14 @@ def generate_schedule(
             by_id = {e.id: e for e in employees}
             first_day = valid_days[0]
             required = max([1] + [shift_type.requirements_by_weekday.get(weekday_of(dd), 0) for dd in valid_days])
-            block_vars = []
+            day_vars_by_day = {dd: [] for dd in valid_days}
             for emp_id in eligible_ids:
                 emp = by_id[emp_id]
                 y = new_x(emp, shift_type.id, first_day)
-                block_vars.append(y)
+                day_vars_by_day[first_day].append(y)
                 for dd in valid_days[1:]:
                     x_other = new_x(emp, shift_type.id, dd)
+                    day_vars_by_day[dd].append(x_other)
                     if shift_type.weekly_block_strictness >= 10:
                         model.Add(x_other == y)
                     else:
@@ -333,10 +334,19 @@ def generate_schedule(
                             objective_terms.append(weight * mismatch)
 
             # fino a 'required' titolari distinti possono "possedere" la settimana in
-            # parallelo (es. 2 posizioni di corsia); ciascuno resta comunque legato
-            # individualmente a tutta la settimana secondo il rigore configurato sopra.
-            model.Add(sum(block_vars) <= required)
-            objective_terms.append(SHORTFALL_PENALTY * (required - sum(block_vars)))
+            # parallelo (es. 2 posizioni di corsia); a rigore massimo (10) restano
+            # identici tutta la settimana (x_other == y sopra), quindi il vincolo di
+            # copertura sotto e' automaticamente lo stesso per ogni giorno. A rigore
+            # parziale, invece, un titolare puo' deviare (con penalita') senza che
+            # nessuno lo sostituisca: senza un vincolo/penalita' *per ogni giorno*
+            # la scopertura dei giorni diversi dal primo passerebbe inosservata anche
+            # se qualcun altro del pool idoneo potrebbe coprirla. Percio' il vincolo
+            # 'sum <= required' e la penalita' di scopertura si applicano ad ogni
+            # giorno della settimana, non solo al primo.
+            for dd in valid_days:
+                day_vars = day_vars_by_day[dd]
+                model.Add(sum(day_vars) <= required)
+                objective_terms.append(SHORTFALL_PENALTY * (required - sum(day_vars)))
             block_slots.append((shift_type, valid_days, required, eligible_ids))
 
     # ------------------------------------------------------- turni giornalieri ordinari
