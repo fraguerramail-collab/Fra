@@ -258,6 +258,25 @@ select.status-preferred_off { background: #fdf1de; }
 .skill-picker-add { margin-top: 0.4rem; border-top: 1px solid var(--border); padding-top: 0.4rem; }
 .skill-picker-add input { width: 100%; }
 
+.checklist-box {
+  max-height: 14rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  background: #fff;
+  columns: 2;
+  column-gap: 1.5rem;
+}
+.checklist-box label {
+  display: block;
+  margin: 0 0 0.2rem 0;
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--text);
+  break-inside: avoid;
+}
+
 .weight-bar {
   display: inline-block;
   width: 60px;

@@ -629,54 +629,57 @@ def suppressions():
     year, month = _current_year_month()
 
     if request.method == "POST":
-        shift_type_id = request.form.get("shift_type_id", type=int)
+        shift_type_ids = request.form.getlist("shift_type_ids", type=int)
         day = request.form.get("day", type=int)
         end_year = request.form.get("end_year", type=int) or year
         end_month = request.form.get("end_month", type=int) or month
         end_day = request.form.get("end_day", type=int) or day
         reason = request.form.get("reason", "").strip() or None
 
-        if shift_type_id and day:
-            shift_type = ShiftType.query.get(shift_type_id)
+        if shift_type_ids and day:
             start_date = date(year, month, day)
             end_date = date(end_year, end_month, end_day)
             if end_date < start_date:
                 flash("La data di fine non puo' essere prima della data di inizio.", "warning")
                 return redirect(url_for("main.suppressions", anno=year, mese=month))
 
-            created = 0
-            skipped_not_scheduled = 0
-            current = start_date
-            while current <= end_date:
-                weekday = current.weekday()  # 0=Lun .. 6=Dom, coerente con days_set
-                days_set = shift_type.days_set_list()
-                normally_scheduled = (not days_set or weekday in days_set) and (
-                    shift_type.requirement_for_weekday(weekday) > 0 or shift_type.is_extra
-                )
-                if normally_scheduled:
-                    exists = Suppression.query.filter_by(
-                        shift_type_id=shift_type_id, year=current.year, month=current.month, day=current.day
-                    ).first()
-                    if not exists:
-                        db.session.add(
-                            Suppression(
-                                shift_type_id=shift_type_id, year=current.year, month=current.month,
-                                day=current.day, reason=reason,
+            total_created = 0
+            total_skipped = 0
+            for shift_type_id in shift_type_ids:
+                shift_type = ShiftType.query.get(shift_type_id)
+                if shift_type is None:
+                    continue
+                current = start_date
+                while current <= end_date:
+                    weekday = current.weekday()  # 0=Lun .. 6=Dom, coerente con days_set
+                    days_set = shift_type.days_set_list()
+                    normally_scheduled = (not days_set or weekday in days_set) and (
+                        shift_type.requirement_for_weekday(weekday) > 0 or shift_type.is_extra
+                    )
+                    if normally_scheduled:
+                        exists = Suppression.query.filter_by(
+                            shift_type_id=shift_type_id, year=current.year, month=current.month, day=current.day
+                        ).first()
+                        if not exists:
+                            db.session.add(
+                                Suppression(
+                                    shift_type_id=shift_type_id, year=current.year, month=current.month,
+                                    day=current.day, reason=reason,
+                                )
                             )
-                        )
-                        created += 1
-                else:
-                    skipped_not_scheduled += 1
-                current += timedelta(days=1)
+                            total_created += 1
+                    else:
+                        total_skipped += 1
+                    current += timedelta(days=1)
 
             db.session.commit()
-            if created:
-                msg = f"{created} soppressione/i aggiunta/e."
-                if skipped_not_scheduled:
-                    msg += f" ({skipped_not_scheduled} giorni ignorati perche' il turno non era comunque previsto.)"
+            if total_created:
+                msg = f"{total_created} soppressione/i aggiunta/e su {len(shift_type_ids)} turno/i."
+                if total_skipped:
+                    msg += f" ({total_skipped} combinazioni giorno/turno ignorate perche' non previste.)"
                 flash(msg, "success")
             else:
-                flash("Nessuna soppressione aggiunta: il turno non era previsto in nessuno dei giorni scelti.", "warning")
+                flash("Nessuna soppressione aggiunta: nessuno dei turni scelti era previsto nei giorni indicati.", "warning")
         return redirect(url_for("main.suppressions", anno=year, mese=month))
 
     items = Suppression.query.filter_by(year=year, month=month).order_by(Suppression.day).all()

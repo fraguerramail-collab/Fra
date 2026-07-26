@@ -19,12 +19,17 @@
 <div class="card">
   <h2>Aggiungi soppressione — {{ month_name }} {{ year }}</h2>
   <form method="post" action="{{ url_for('main.suppressions', anno=year, mese=month) }}">
-    <label>Turno<br>
-      <select name="shift_type_id">
-        {% for st in shift_types %}<option value="{{ st.id }}">{{ st.name }}</option>{% endfor %}
-      </select>
-    </label>
-    &nbsp;
+    <label><strong>Turni da sopprimere:</strong></label>
+    <div class="toolbar" style="margin-top:0.2rem">
+      <button type="button" onclick="document.querySelectorAll('.suppress-shift-cb').forEach(function(cb){cb.checked=true})">Seleziona tutto</button>
+      <button type="button" class="secondary" onclick="document.querySelectorAll('.suppress-shift-cb').forEach(function(cb){cb.checked=false})">Deseleziona tutto</button>
+    </div>
+    <div class="checklist-box">
+      {% for st in shift_types %}
+      <label><input type="checkbox" class="suppress-shift-cb" name="shift_type_ids" value="{{ st.id }}"> {{ st.name }}</label>
+      {% endfor %}
+    </div>
+    <br>
     <label>Dal giorno<br>
       <select name="day">
         {% for d in day_range %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
