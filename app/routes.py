@@ -1,6 +1,7 @@
 import calendar
 import csv
 import io
+import json
 from datetime import date, timedelta
 
 from flask import Blueprint, flash, redirect, render_template, request, send_file, url_for
@@ -752,15 +753,16 @@ def schedule():
     assignments = Assignment.query.filter_by(year=year, month=month).all()
     grid = {}
     for a in assignments:
-        grid.setdefault((a.day, a.shift_type_id), []).append(a.employee)
+        grid.setdefault((a.day, a.shift_type_id), []).append(a)
 
     day_weekday_names = [WEEKDAY_NAMES[(first_weekday + d) % 7] for d in range(num_days)]
     edit_mode = request.args.get("modifica") == "1"
+    employees_json = json.dumps([{"id": e.id, "code": e.code, "name": e.name} for e in people])
 
     return render_template(
         "schedule.html", employees=people, shift_types=types, year=year, month=month,
         month_name=MONTH_NAMES[month], month_names=MONTH_NAMES, day_range=range(1, num_days + 1),
-        day_weekday_names=day_weekday_names, grid=grid, edit_mode=edit_mode,
+        day_weekday_names=day_weekday_names, grid=grid, edit_mode=edit_mode, employees_json=employees_json,
     )
 
 
@@ -887,20 +889,49 @@ def save_schedule():
 
     types = ShiftType.query.all()
 
+    # una cella lasciata identica a prima resta con lo stesso stato (manuale/
+    # automatica) che aveva; solo le celle effettivamente cambiate diventano
+    # manuali, cosi' la distinzione visiva sopravvive al salvataggio.
+    old_cells = {}
+    for a in Assignment.query.filter_by(year=year, month=month).all():
+        old_cells.setdefault((a.day, a.shift_type_id), {})[a.employee_id] = a.auto_generated
+
     Assignment.query.filter_by(year=year, month=month).delete()
     for day in range(1, num_days + 1):
         for st in types:
-            selected_ids = request.form.getlist(f"slot_{day}_{st.id}")
+            selected_ids = [int(x) for x in request.form.getlist(f"slot_{day}_{st.id}")]
+            old_cell = old_cells.get((day, st.id), {})
+            unchanged = set(selected_ids) == set(old_cell.keys())
             for emp_id in selected_ids:
                 db.session.add(
                     Assignment(
-                        employee_id=int(emp_id), shift_type_id=st.id, year=year, month=month, day=day,
-                        auto_generated=False,
+                        employee_id=emp_id, shift_type_id=st.id, year=year, month=month, day=day,
+                        auto_generated=bool(unchanged and old_cell.get(emp_id)),
                     )
                 )
     db.session.commit()
     flash("Pianificazione salvata.", "success")
-    return redirect(url_for("main.schedule", anno=year, mese=month))
+    return redirect(url_for("main.schedule", anno=year, mese=month, modifica=1))
+
+
+@bp.route("/pianificazione/pulisci", methods=["POST"])
+def clear_schedule():
+    year = request.form.get("anno", type=int)
+    month = request.form.get("mese", type=int)
+    n = Assignment.query.filter_by(year=year, month=month).delete()
+    db.session.commit()
+    flash(f"Pianificazione di {MONTH_NAMES[month]} {year} cancellata ({n} assegnazione/i rimossa/e).", "success")
+    return redirect(url_for("main.schedule", anno=year, mese=month, modifica=1))
+
+
+@bp.route("/pianificazione/pulisci-auto", methods=["POST"])
+def clear_auto_schedule():
+    year = request.form.get("anno", type=int)
+    month = request.form.get("mese", type=int)
+    n = Assignment.query.filter_by(year=year, month=month, auto_generated=True).delete()
+    db.session.commit()
+    flash(f"{n} assegnazione/i automatica/che cancellata/e (quelle manuali restano).", "success")
+    return redirect(url_for("main.schedule", anno=year, mese=month, modifica=1))
 
 
 @bp.route("/pianificazione/esporta.csv")

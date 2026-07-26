@@ -220,6 +220,21 @@ select.status-preferred_off { background: #fdf1de; }
 }
 .empty-cell { color: var(--muted); }
 
+.chip-manual {
+  background: #fdf1de;
+  border-color: #d99a3d;
+  color: #8a5a15;
+  font-weight: 700;
+}
+
+.cell-editable {
+  cursor: pointer;
+  min-height: 1.3rem;
+  padding: 0.15rem;
+  border-radius: 4px;
+}
+.cell-editable:hover { background: #eef1fa; }
+
 .skill-picker { position: relative; display: inline-block; }
 .skill-picker-toggle {
   background: #fff;

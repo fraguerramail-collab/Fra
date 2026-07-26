@@ -29,34 +29,52 @@
   <button type="submit">Genera turni automaticamente</button>
 </form>
 
-<p><small>Assicurati di aver inserito le <a href="{{ url_for('main.availability', anno=year, mese=month) }}">disponibilità</a> per {{ month_name }} {{ year }} prima di generare.</small></p>
+<form method="post" action="{{ url_for('main.clear_auto_schedule') }}" class="toolbar" onsubmit="return confirm('Cancellare le assegnazioni generate automaticamente di {{ month_name }} {{ year }}? Quelle inserite a mano restano.');">
+  <input type="hidden" name="anno" value="{{ year }}">
+  <input type="hidden" name="mese" value="{{ month }}">
+  <button type="submit" class="secondary">↺ Pulisci solo gli automatici</button>
+</form>
+
+<form method="post" action="{{ url_for('main.clear_schedule') }}" class="toolbar" onsubmit="return confirm('Cancellare TUTTA la pianificazione di {{ month_name }} {{ year }} (manuale e automatica)? Non si può annullare.');">
+  <input type="hidden" name="anno" value="{{ year }}">
+  <input type="hidden" name="mese" value="{{ month }}">
+  <button type="submit" class="danger">🗑 Pulisci tutto il mese</button>
+</form>
+
+<p><small>Assicurati di aver inserito le <a href="{{ url_for('main.availability', anno=year, mese=month) }}">disponibilità</a> per {{ month_name }} {{ year }} prima di generare. I turni <span class="chip chip-manual" style="padding:0 0.4rem">esempio</span> arancioni sono quelli inseriti a mano; restano tali finché non li tocchi di nuovo, anche rigenerando gli altri.</small></p>
 
 {% if edit_mode %}
-<form method="post" action="{{ url_for('main.save_schedule') }}">
+<form method="post" action="{{ url_for('main.save_schedule') }}" id="schedule-form">
   <input type="hidden" name="anno" value="{{ year }}">
   <input type="hidden" name="mese" value="{{ month }}">
   <div class="card table-scroll">
-    <table>
+    <table class="table-compact">
       <thead>
         <tr>
-          <th>Giorno</th>
+          <th>G</th>
           {% for st in shift_types %}
-          <th><span class="pill" style="background: {{ st.color }}">{{ st.code }}</span> {{ st.name }}</th>
+          <th title="{{ st.name }}"><span class="pill" style="background: {{ st.color }}">{{ st.code }}</span></th>
           {% endfor %}
         </tr>
       </thead>
       <tbody>
         {% for day in day_range %}
         <tr>
-          <td>{{ day }}<br><small>{{ day_weekday_names[day-1] }}</small></td>
+          <td class="day-cell">{{ day }} <small>{{ day_weekday_names[day-1] }}</small></td>
           {% for st in shift_types %}
           {% set assigned = grid.get((day, st.id), []) %}
           <td class="cell-slot">
-            <select name="slot_{{ day }}_{{ st.id }}" multiple size="4" style="width:100%">
-              {% for emp in employees %}
-              <option value="{{ emp.id }}" {% if emp in assigned %}selected{% endif %}>{{ emp.name }}</option>
-              {% endfor %}
-            </select>
+            <input type="hidden" class="cell-value" data-day="{{ day }}" data-shift="{{ st.id }}"
+                   value="{{ assigned|map(attribute='employee_id')|map('string')|join(',') }}">
+            <div class="cell-editable" data-shift-name="{{ st.name }}" data-day="{{ day }}">
+              <div class="cell-chips">
+                {% if assigned %}
+                {% for a in assigned %}<span class="chip {{ '' if a.auto_generated else 'chip-manual' }}" title="{{ a.employee.name }}">{{ a.employee.code }}</span>{% endfor %}
+                {% else %}
+                <span class="empty-cell">—</span>
+                {% endif %}
+              </div>
+            </div>
           </td>
           {% endfor %}
         </tr>
@@ -65,8 +83,100 @@
     </table>
   </div>
   <button type="submit">Salva modifiche manuali</button>
-  <p><small>Tieni premuto Ctrl (Cmd su Mac) per selezionare più dipendenti nella stessa cella. Ogni cella mostra <em>tutti</em> i dipendenti: quelli evidenziati sono gli assegnati.</small></p>
+  <p><small>Clicca su una cella per scegliere chi assegnare. I turni arancioni sono manuali.</small></p>
 </form>
+
+<div id="cell-editor" class="skill-picker-menu">
+  <div id="cell-editor-title" style="font-weight:700;margin-bottom:0.4rem;font-size:0.85rem"></div>
+  <div id="cell-editor-list"></div>
+</div>
+
+<script>
+var ALL_EMPLOYEES = {{ employees_json|safe }};
+var EMPLOYEES_BY_ID = {};
+ALL_EMPLOYEES.forEach(function (e) { EMPLOYEES_BY_ID[e.id] = e; });
+var currentCell = null;
+
+function openCellEditor(cellDiv) {
+  currentCell = cellDiv;
+  var valueInput = cellDiv.parentElement.querySelector('.cell-value');
+  var selectedIds = {};
+  (valueInput.value || '').split(',').forEach(function (id) { if (id) selectedIds[id] = true; });
+
+  var list = document.getElementById('cell-editor-list');
+  list.innerHTML = '';
+  ALL_EMPLOYEES.forEach(function (emp) {
+    var label = document.createElement('label');
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = emp.id;
+    cb.checked = !!selectedIds[emp.id];
+    cb.addEventListener('change', updateCellValue);
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(' ' + emp.name));
+    list.appendChild(label);
+  });
+
+  document.getElementById('cell-editor-title').textContent =
+    cellDiv.dataset.shiftName + ' — giorno ' + cellDiv.dataset.day;
+
+  var editor = document.getElementById('cell-editor');
+  var rect = cellDiv.getBoundingClientRect();
+  editor.style.top = rect.bottom + 'px';
+  editor.style.left = rect.left + 'px';
+  editor.classList.add('open');
+}
+
+function closeCellEditor() {
+  document.getElementById('cell-editor').classList.remove('open');
+  currentCell = null;
+}
+
+function updateCellValue() {
+  if (!currentCell) return;
+  var checked = document.querySelectorAll('#cell-editor-list input:checked');
+  var ids = Array.prototype.map.call(checked, function (cb) { return cb.value; });
+  var valueInput = currentCell.parentElement.querySelector('.cell-value');
+  valueInput.value = ids.join(',');
+  var chipsDiv = currentCell.querySelector('.cell-chips');
+  if (ids.length === 0) {
+    chipsDiv.innerHTML = '<span class="empty-cell">—</span>';
+  } else {
+    chipsDiv.innerHTML = ids.map(function (id) {
+      var e = EMPLOYEES_BY_ID[id];
+      var name = e ? e.name : id;
+      var code = e ? e.code : id;
+      return '<span class="chip chip-manual" title="' + name + '">' + code + '</span>';
+    }).join('');
+  }
+}
+
+document.addEventListener('click', function (e) {
+  var cell = e.target.closest('.cell-editable');
+  if (cell) {
+    openCellEditor(cell);
+    e.stopPropagation();
+    return;
+  }
+  if (!e.target.closest('#cell-editor')) {
+    closeCellEditor();
+  }
+});
+
+document.getElementById('schedule-form').addEventListener('submit', function () {
+  var form = this;
+  form.querySelectorAll('.cell-value').forEach(function (inp) {
+    var day = inp.dataset.day, shift = inp.dataset.shift;
+    (inp.value ? inp.value.split(',') : []).forEach(function (id) {
+      var hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = 'slot_' + day + '_' + shift;
+      hidden.value = id;
+      form.appendChild(hidden);
+    });
+  });
+});
+</script>
 {% else %}
 <div class="card table-scroll">
   <table class="table-compact">
@@ -87,7 +197,7 @@
         <td class="cell-slot">
           {% if assigned %}
           <div class="chip-list">
-            {% for emp in assigned %}<span class="chip" title="{{ emp.name }}">{{ emp.code }}</span>{% endfor %}
+            {% for a in assigned %}<span class="chip {{ '' if a.auto_generated else 'chip-manual' }}" title="{{ a.employee.name }}">{{ a.employee.code }}</span>{% endfor %}
           </div>
           {% else %}
           <span class="empty-cell">—</span>
@@ -99,6 +209,6 @@
     </tbody>
   </table>
 </div>
-<p><small>Vista di sola lettura (sigle dei dipendenti, passa il mouse per il nome completo e sulle intestazioni per il nome del turno). Usa "✏️ Modifica manualmente" qui sopra per correggere le assegnazioni.</small></p>
+<p><small>Vista di sola lettura (sigle dei dipendenti, passa il mouse per il nome completo e sulle intestazioni per il nome del turno). I turni <span class="chip chip-manual" style="padding:0 0.4rem">esempio</span> arancioni sono manuali. Usa "✏️ Modifica manualmente" qui sopra per correggere le assegnazioni.</small></p>
 {% endif %}
 {% endblock %}
