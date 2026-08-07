@@ -92,6 +92,7 @@ class PreferenceInput:
     days_set: set
     pref_type: str  # EVITA / PREFERISCI / RISERVA / MAX_MESE
     weight: int = 1
+    time_bands: set = field(default_factory=set)  # vuoto = tutte le fasce
 
 
 @dataclass
@@ -528,7 +529,11 @@ def generate_schedule(
     maxmese_overflow_cache = {}
     for p in preferences:
         target_employees = [e for e in employees if p.employee_id is None or p.employee_id == e.id]
-        target_shift_types = [st for st in shift_types if p.shift_type_id is None or p.shift_type_id == st.id]
+        target_shift_types = [
+            st for st in shift_types
+            if (p.shift_type_id is None or p.shift_type_id == st.id)
+            and (not p.time_bands or (st.time_bands & p.time_bands))
+        ]
 
         for emp in target_employees:
             for st in target_shift_types:

@@ -95,25 +95,52 @@
 var ALL_EMPLOYEES = {{ employees_json|safe }};
 var EMPLOYEES_BY_ID = {};
 ALL_EMPLOYEES.forEach(function (e) { EMPLOYEES_BY_ID[e.id] = e; });
+var SHIFT_TYPE_META = {{ shift_type_meta_json|safe }};
+var ASSIGNMENTS_BY_EMPLOYEE_DAY = {{ assignments_by_employee_day_json|safe }};
+var POOL_TOTALS = {{ pool_totals_json|safe }};
 var currentCell = null;
 
 function openCellEditor(cellDiv) {
   currentCell = cellDiv;
   var valueInput = cellDiv.parentElement.querySelector('.cell-value');
+  var shiftId = valueInput.dataset.shift;
+  var day = valueInput.dataset.day;
+  var meta = SHIFT_TYPE_META[shiftId] || {skill_required: '', balance_pool: ''};
+  var required = (meta.skill_required || '').split('|').map(function (s) { return s.trim(); }).filter(Boolean);
   var selectedIds = {};
   (valueInput.value || '').split(',').forEach(function (id) { if (id) selectedIds[id] = true; });
 
+  var sorted = ALL_EMPLOYEES.slice().sort(function (a, b) {
+    var aOk = !required.length || required.some(function (r) { return (a.skills || []).indexOf(r) !== -1; });
+    var bOk = !required.length || required.some(function (r) { return (b.skills || []).indexOf(r) !== -1; });
+    if (aOk !== bOk) return aOk ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
   var list = document.getElementById('cell-editor-list');
   list.innerHTML = '';
-  ALL_EMPLOYEES.forEach(function (emp) {
+  sorted.forEach(function (emp) {
+    var skilled = !required.length || required.some(function (r) { return (emp.skills || []).indexOf(r) !== -1; });
+    var busyList = ((ASSIGNMENTS_BY_EMPLOYEE_DAY[emp.id] || {})[day] || []).filter(function (n) {
+      return !(selectedIds[emp.id] && n === cellDiv.dataset.shiftName);
+    });
+
     var label = document.createElement('label');
+    if (!skilled) label.style.color = 'var(--muted)';
     var cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.value = emp.id;
     cb.checked = !!selectedIds[emp.id];
     cb.addEventListener('change', updateCellValue);
     label.appendChild(cb);
-    label.appendChild(document.createTextNode(' ' + emp.name));
+    var text = ' ' + emp.name;
+    if (!skilled) text += ' (skill mancante)';
+    if (busyList.length) text += ' — già impegnato: ' + busyList.join(', ');
+    if (meta.balance_pool) {
+      var count = (POOL_TOTALS[meta.balance_pool] || {})[emp.id] || 0;
+      text += ' · ' + meta.balance_pool + ': ' + count + ' quest\'anno';
+    }
+    label.appendChild(document.createTextNode(text));
     list.appendChild(label);
   });
 

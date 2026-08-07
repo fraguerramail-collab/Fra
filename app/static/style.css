@@ -309,6 +309,38 @@ select.status-preferred_off { background: #fdf1de; }
   border-radius: 4px;
 }
 
+.employee-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  align-items: start;
+}
+.employee-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+}
+.employee-card[open] { border-color: var(--primary); }
+.employee-card-inactive { opacity: 0.6; }
+.employee-card summary {
+  cursor: pointer;
+  list-style: none;
+}
+.employee-card summary::-webkit-details-marker { display: none; }
+.employee-card summary strong { margin-left: 0.4rem; }
+.employee-card summary .chip-list { margin-top: 0.35rem; }
+.employee-card-body {
+  margin-top: 0.7rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.employee-card-body label { display: block; margin: 0 0 0.35rem 0; width: 100%; }
+
 .table-compact { font-size: 0.76rem; }
 .table-compact th, .table-compact td { padding: 0.15rem 0.3rem; }
 .table-compact .cell-slot { min-width: 62px; }

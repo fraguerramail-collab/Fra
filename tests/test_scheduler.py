@@ -377,6 +377,33 @@ def test_preference_max_mese_is_soft_not_hard():
     assert len(result.assignments) == 31
 
 
+def test_preference_time_band_applies_to_every_shift_in_that_band_not_just_one():
+    # niente shift_type_id: la preferenza deve valere per QUALSIASI turno
+    # nella fascia oraria scelta, non serve piu' crearne uno per ciascuno.
+    employees = [emp(1, "A", skills={"X"}), emp(2, "B", skills={"X"})]
+    morning = shift(1, "Turno mattina", skill_required="X", time_bands={"MATTINA"})
+    afternoon = shift(2, "Turno pomeriggio", skill_required="X", time_bands={"POMERIGGIO"})
+    prefs = [
+        PreferenceInput(
+            employee_id=1, shift_type_id=None, days_set={0}, time_bands={"POMERIGGIO"},
+            pref_type="EVITA", weight=20,
+        )
+    ]
+
+    result = run(employees=employees, shift_types=[morning, afternoon], preferences=prefs)
+
+    first_weekday = monthrange(2026, 1)[0]
+    mondays = [d for d in range(1, 32) if (d - 1 + first_weekday) % 7 == 0]
+    afternoon_on_monday = {
+        a["employee_id"] for a in result.assignments if a["shift_type_id"] == 2 and a["day"] in mondays
+    }
+    assert 1 not in afternoon_on_monday
+    morning_on_monday = {
+        a["employee_id"] for a in result.assignments if a["shift_type_id"] == 1 and a["day"] in mondays
+    }
+    assert 1 in morning_on_monday  # nessuna penalita' sul turno del mattino
+
+
 def test_skill_rule_block_excludes_from_every_shift_that_weekday():
     # 2026-01-05 e' lunedi'. Chi ha skill BREAST non deve comparire in
     # NESSUN turno di lunedi', anche se qualificato e disponibile.

@@ -150,6 +150,7 @@ class Preference(db.Model):
     employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=True)  # null = tutti
     shift_type_id = db.Column(db.Integer, db.ForeignKey("shift_type.id"), nullable=True)  # null = tutti
     days_set = db.Column(db.String(30), nullable=True)  # CSV weekday int, null = tutti
+    time_bands = db.Column(db.String(60), nullable=True)  # CSV fasce (MATTINA/POMERIGGIO/NOTTE), null = tutte
     pref_type = db.Column(db.String(20), nullable=False)  # EVITA/PREFERISCI/RISERVA/MAX_MESE
     weight = db.Column(db.Integer, nullable=False, default=1)  # per MAX_MESE: e' il limite mensile
 
@@ -158,6 +159,9 @@ class Preference(db.Model):
 
     def days_set_list(self):
         return parse_days_set(self.days_set)
+
+    def time_bands_list(self):
+        return parse_csv(self.time_bands)
 
 
 class SkillRule(db.Model):

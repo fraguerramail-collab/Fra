@@ -513,11 +513,13 @@ def preferences():
         pref_type = request.form.get("pref_type")
         if pref_type in PREFERENCE_TYPES:
             days = request.form.getlist("days_set")
+            bands = request.form.getlist("time_bands")
             db.session.add(
                 Preference(
                     employee_id=request.form.get("employee_id", type=int) or None,
                     shift_type_id=request.form.get("shift_type_id", type=int) or None,
                     days_set=",".join(days) or None,
+                    time_bands=",".join(bands) or None,
                     pref_type=pref_type,
                     weight=request.form.get("weight", type=int) or 1,
                 )
@@ -531,7 +533,7 @@ def preferences():
     types = ShiftType.query.order_by(ShiftType.sort_order).all()
     return render_template(
         "preferences.html", preferences=prefs, employees=people, shift_types=types,
-        pref_types=PREFERENCE_TYPES, weekday_names=WEEKDAY_NAMES,
+        pref_types=PREFERENCE_TYPES, weekday_names=WEEKDAY_NAMES, time_bands=TIME_BANDS,
     )
 
 
@@ -788,12 +790,42 @@ def schedule():
 
     day_weekday_names = [WEEKDAY_NAMES[(first_weekday + d) % 7] for d in range(num_days)]
     edit_mode = request.args.get("modifica") == "1"
-    employees_json = json.dumps([{"id": e.id, "code": e.code, "name": e.name} for e in people])
+    employees_json = json.dumps(
+        [{"id": e.id, "code": e.code, "name": e.name, "skills": list(e.skill_list())} for e in people]
+    )
+
+    # metadati dei turni (skill richiesta, pool di equita') per aiutare la scelta
+    # nell'editor manuale: chi ha la skill, chi e' gia' impegnato quel giorno, e
+    # quanti turni di quel pool (es. aggiuntiva a pagamento) ha gia' fatto quest'anno.
+    shift_type_meta = {
+        st.id: {"skill_required": st.skill_required or "", "balance_pool": st.balance_pool or ""}
+        for st in types
+    }
+
+    assignments_by_employee_day = {}
+    for a in assignments:
+        st = next((t for t in types if t.id == a.shift_type_id), None)
+        label = st.name if st else "?"
+        assignments_by_employee_day.setdefault(a.employee_id, {}).setdefault(a.day, []).append(label)
+
+    pool_by_shift_type = {st.id: st.balance_pool for st in types if st.balance_pool}
+    pool_totals = {}
+    if pool_by_shift_type:
+        year_assignments = Assignment.query.filter_by(year=year).all()
+        for a in year_assignments:
+            pool = pool_by_shift_type.get(a.shift_type_id)
+            if not pool:
+                continue
+            pool_totals.setdefault(pool, {})
+            pool_totals[pool][a.employee_id] = pool_totals[pool].get(a.employee_id, 0) + 1
 
     return render_template(
         "schedule.html", employees=people, shift_types=types, year=year, month=month,
         month_name=MONTH_NAMES[month], month_names=MONTH_NAMES, day_range=range(1, num_days + 1),
         day_weekday_names=day_weekday_names, grid=grid, edit_mode=edit_mode, employees_json=employees_json,
+        shift_type_meta_json=json.dumps(shift_type_meta),
+        assignments_by_employee_day_json=json.dumps(assignments_by_employee_day),
+        pool_totals_json=json.dumps(pool_totals),
     )
 
 
@@ -820,7 +852,7 @@ def generate():
     preference_inputs = [
         PreferenceInput(
             employee_id=p.employee_id, shift_type_id=p.shift_type_id, days_set=p.days_set_list(),
-            pref_type=p.pref_type, weight=p.weight,
+            pref_type=p.pref_type, weight=p.weight, time_bands=set(p.time_bands_list()),
         )
         for p in Preference.query.all()
     ]

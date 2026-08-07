@@ -44,19 +44,28 @@
     <label><input type="checkbox" name="days_set" value="{{ weekday }}"> {{ weekday_names[weekday][:3] }}</label>
     {% endfor %}
     <br><br>
+    <label><strong>Fasce orarie (vuoto = tutte):</strong></label>
+    {% for band in time_bands %}
+    <label><input type="checkbox" name="time_bands" value="{{ band }}"> {{ band }}</label>
+    {% endfor %}
+    <p><small>Se scegli solo una fascia (es. POMERIGGIO) e nessun turno specifico, la preferenza vale per
+    <strong>tutti</strong> i turni di quella fascia oraria (es. "evita Rossi il lunedì pomeriggio" evita
+    automaticamente qualsiasi turno che copre le ore del pomeriggio quel giorno, non solo uno specifico).</small></p>
+    <br>
     <button type="submit">Aggiungi</button>
   </form>
 </div>
 
 <div class="card table-scroll">
   <table>
-    <thead><tr><th>Dipendente</th><th>Turno</th><th>Giorni</th><th>Tipo</th><th>Peso</th><th></th></tr></thead>
+    <thead><tr><th>Dipendente</th><th>Turno</th><th>Giorni</th><th>Fasce</th><th>Tipo</th><th>Peso</th><th></th></tr></thead>
     <tbody>
       {% for p in preferences %}
       <tr>
         <td>{{ p.employee.name if p.employee else 'tutti' }}</td>
         <td>{{ p.shift_type.name if p.shift_type else 'tutti' }}</td>
         <td>{% if p.days_set %}{% for wd in p.days_set_list() %}{{ weekday_names[wd][:3] }} {% endfor %}{% else %}tutti{% endif %}</td>
+        <td>{% if p.time_bands %}{{ p.time_bands_list()|join(', ') }}{% else %}tutte{% endif %}</td>
         <td>{{ p.pref_type }}</td>
         <td>
           <form id="pref-form-{{ p.id }}" method="post" action="{{ url_for('main.edit_preference', pref_id=p.id) }}" class="inline"></form>
@@ -74,7 +83,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="6">Nessuna preferenza definita.</td></tr>
+      <tr><td colspan="7">Nessuna preferenza definita.</td></tr>
       {% endfor %}
     </tbody>
   </table>
