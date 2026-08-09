@@ -51,7 +51,9 @@
       <strong>{{ emp.name }}</strong>
       {% if not emp.active %}<span class="chip">disattivato</span>{% endif %}
       <div class="chip-list">
-        {% for sk in emp.skill_list()|sort %}<span class="chip">{{ sk }}</span>{% else %}<span class="empty-cell">nessuna skill</span>{% endfor %}
+        {% set all_skills = emp.skill_list()|sort %}
+        {% for sk in all_skills[:4] %}<span class="chip">{{ sk }}</span>{% else %}<span class="empty-cell">nessuna skill</span>{% endfor %}
+        {% if all_skills|length > 4 %}<span class="chip" title="{{ all_skills[4:]|join(', ') }}">+{{ all_skills|length - 4 }}</span>{% endif %}
       </div>
     </summary>
     <div class="employee-card-body">

@@ -347,6 +347,28 @@ select.status-preferred_off { background: #fdf1de; }
 }
 .employee-card-body label { display: block; margin: 0 0 0.35rem 0; width: 100%; }
 
+.shift-type-card { padding: 0.5rem 0.9rem; }
+.shift-type-reorder { margin-bottom: 0.4rem; }
+.shift-type-card details summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.3rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.shift-type-card details summary::-webkit-details-marker { display: none; }
+.shift-type-card details summary::before {
+  content: "▸";
+  color: var(--muted);
+  font-size: 0.8rem;
+  width: 0.9rem;
+}
+.shift-type-card details[open] summary::before { content: "▾"; }
+.shift-type-card details[open] summary { border-bottom: 1px solid var(--border); margin-bottom: 0.6rem; }
+.shift-type-card-body { padding-top: 0.2rem; }
+
 .table-compact { font-size: 0.76rem; }
 .table-compact th, .table-compact td { padding: 0.15rem 0.3rem; }
 .table-compact .cell-slot { min-width: 62px; }

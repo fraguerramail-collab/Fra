@@ -16,9 +16,11 @@
   </form>
 </div>
 
+<p><small>Clicca su un turno per aprire/chiudere la scheda di modifica. Le frecce/posizione servono a riordinarli (l'ordine vale ovunque: qui, pianificazione, disponibilità...).</small></p>
+
 {% for st in shift_types %}
-<div class="card">
-  <div class="save-bar">
+<div class="card shift-type-card">
+  <div class="toolbar shift-type-reorder">
     <form class="inline" method="post" action="{{ url_for('main.move_shift_type', shift_type_id=st.id) }}">
       <input type="hidden" name="direction" value="up">
       <button type="submit" class="secondary" title="Sposta su" {% if loop.first %}disabled{% endif %}>▲</button>
@@ -34,106 +36,114 @@
     </form>
     <small style="color:var(--muted)">/ {{ shift_types|length }}</small>
   </div>
-  <form method="post" action="{{ url_for('main.edit_shift_type', shift_type_id=st.id) }}">
-    <div class="save-bar">
+
+  <details>
+    <summary>
       <span class="pill" style="background: {{ st.color }}">{{ st.code }}</span>
-      <input type="text" name="name" value="{{ st.name }}" style="font-size:1rem">
-      <button type="submit">✓ Salva</button>
-    </div>
+      <strong>{{ st.name }}</strong>
+      {% if st.group %}<span class="chip">{{ st.group }}</span>{% endif %}
+      {% if st.report_column %}<span class="chip">report: {{ st.report_column }}</span>{% endif %}
+      {% if st.weekly_block %}<span class="chip">blocco settimanale</span>{% endif %}
+      {% if st.is_extra %}<span class="chip">extra</span>{% endif %}
+    </summary>
+    <div class="shift-type-card-body">
+      <form method="post" action="{{ url_for('main.edit_shift_type', shift_type_id=st.id) }}">
+        <div class="toolbar">
+          <label>Nome <input type="text" name="name" value="{{ st.name }}"></label>
+          <label>Codice <input type="text" name="code" value="{{ st.code }}" style="width:5rem"></label>
+          <label>Gruppo <input type="text" name="group" value="{{ st.group or '' }}" style="width:9rem" placeholder="NOTTE, GUARDIA, CORSIA..."></label>
+          <label>Colore <input type="color" name="color" value="{{ st.color }}"></label>
+          <label>Colonna nel report <input type="text" name="report_column" value="{{ st.report_column or '' }}" style="width:9rem" placeholder="vuoto = colonna propria"
+                 title="Turni diversi (es. su giorni/orari diversi) con la stessa 'colonna nel report' vengono mostrati insieme nella stessa colonna in Pianificazione/Report/CSV, anche se restano turni distinti per la generazione automatica. Es: 'Visite (Lunedì)' e 'Visite (Giovedì)' -> scrivi VISITE su entrambi."></label>
+        </div>
 
-    <div class="toolbar">
-      <label>Codice <input type="text" name="code" value="{{ st.code }}" style="width:5rem"></label>
-      <label>Gruppo <input type="text" name="group" value="{{ st.group or '' }}" style="width:9rem" placeholder="NOTTE, GUARDIA, CORSIA..."></label>
-      <label>Colore <input type="color" name="color" value="{{ st.color }}"></label>
-      <label>Colonna nel report <input type="text" name="report_column" value="{{ st.report_column or '' }}" style="width:9rem" placeholder="vuoto = colonna propria"
-             title="Turni diversi (es. su giorni/orari diversi) con la stessa 'colonna nel report' vengono mostrati insieme nella stessa colonna in Pianificazione/Report/CSV, anche se restano turni distinti per la generazione automatica. Es: 'Visite (Lunedì)' e 'Visite (Giovedì)' -> scrivi VISITE su entrambi."></label>
-    </div>
-
-    <div class="toolbar">
-      <label><strong>Fasce orarie:</strong></label>
-      {% set current_bands = (st.time_bands or '').split(',') %}
-      {% for band in time_bands %}
-      <label><input type="checkbox" name="time_bands" value="{{ band }}" {% if band in current_bands %}checked{% endif %}> {{ band }}</label>
-      {% endfor %}
-    </div>
-
-    <div class="toolbar">
-      <label><strong>Giorni previsti</strong> (nessuno selezionato = tutti i giorni):</label>
-      {% set current_days = (st.days_set or '').split(',') %}
-      {% for weekday in range(7) %}
-      <label><input type="checkbox" name="days_set" value="{{ weekday }}" {% if current_days and weekday|string in current_days %}checked{% endif %}> {{ weekday_names[weekday][:3] }}</label>
-      {% endfor %}
-    </div>
-
-    <div class="toolbar">
-      <label>Skill richiesta (OR con "|") <input type="text" name="skill_required" value="{{ st.skill_required or '' }}" placeholder="es. PR|SR"></label>
-      <label>Categorie escluse (CSV) <input type="text" name="excluded_categories" value="{{ st.excluded_categories or '' }}" placeholder="es. SP"></label>
-    </div>
-
-    <div class="toolbar">
-      <label><input type="checkbox" name="exclusive_day" {% if st.exclusive_day %}checked{% endif %}> Turno esclusivo (nessun altro turno lo stesso giorno)</label>
-      <label><input type="checkbox" name="requires_rest_next_day" {% if st.requires_rest_next_day %}checked{% endif %}> Richiede riposo il giorno dopo (smonto)</label>
-      <label>Eccezione smonto (turno ammesso sab→dom)
-        <select name="rest_exception_shift_type_id">
-          <option value="">-- nessuna --</option>
-          {% for other in shift_types %}
-          <option value="{{ other.id }}" {% if st.rest_exception_shift_type_id == other.id %}selected{% endif %}>{{ other.name }}</option>
+        <div class="toolbar">
+          <label><strong>Fasce orarie:</strong></label>
+          {% set current_bands = (st.time_bands or '').split(',') %}
+          {% for band in time_bands %}
+          <label><input type="checkbox" name="time_bands" value="{{ band }}" {% if band in current_bands %}checked{% endif %}> {{ band }}</label>
           {% endfor %}
-        </select>
-      </label>
-      <label>Distanza minima tra due occorrenze (giorni) <input type="number" name="min_gap_days" min="0" value="{{ st.min_gap_days }}" style="width:4rem"></label>
-    </div>
+        </div>
 
-    <div class="toolbar">
-      <label><input type="checkbox" name="weekly_block" {% if st.weekly_block %}checked{% endif %}> Assegnato per l'intera settimana (es. corsia)</label>
-      <label>Rigore blocco
-        <input type="range" name="weekly_block_strictness" min="0" max="10" step="1"
-               value="{{ st.weekly_block_strictness }}" oninput="this.nextElementSibling.textContent = this.value">
-        <output>{{ st.weekly_block_strictness }}</output>/10
-      </label>
-      <label>Gruppo equità settimanale <input type="text" name="block_group" value="{{ st.block_group or '' }}" placeholder="es. CORSIA" style="width:8rem"></label>
-    </div>
-    <div class="toolbar">
-      <small>Rigore blocco: 10 = ferrea (sempre la stessa persona tutta la settimana, come oggi) &middot;
-      valori piu' bassi permettono al risolutore di spostare la persona su un altro turno in un singolo
-      giorno della settimana se serve altrove (es. per una skill scoperta), con un costo che cresce con il
-      valore &middot; 0 = nessuna preferenza a restare sul blocco (massima liberta').</small>
-    </div>
-
-    <div class="toolbar">
-      <label><input type="checkbox" name="is_extra" {% if st.is_extra %}checked{% endif %}> Turno extra (attivabile solo su date specifiche, pagina "Extra")</label>
-      <label>Pool equità separato <input type="text" name="balance_pool" value="{{ st.balance_pool or '' }}" placeholder="es. EXTRA_ECONOMICO" style="width:10rem"></label>
-    </div>
-
-    <h3>Personale richiesto per giorno della settimana (non usato per turni "corsia" o "extra"; ignorato sab/dom se il turno fa parte di un ruolo weekend)</h3>
-    <table style="max-width:980px">
-      <thead><tr><th></th>{% for wd in weekday_names %}<th>{{ wd[:3] }}</th>{% endfor %}</tr></thead>
-      <tbody>
-        <tr>
-          <td><small>Persone</small></td>
+        <div class="toolbar">
+          <label><strong>Giorni previsti</strong> (nessuno selezionato = tutti i giorni):</label>
+          {% set current_days = (st.days_set or '').split(',') %}
           {% for weekday in range(7) %}
-          <td><input type="number" min="0" style="width:4rem" name="required_{{ weekday }}" value="{{ st.requirement_for_weekday(weekday) }}"></td>
+          <label><input type="checkbox" name="days_set" value="{{ weekday }}" {% if current_days and weekday|string in current_days %}checked{% endif %}> {{ weekday_names[weekday][:3] }}</label>
           {% endfor %}
-        </tr>
-        <tr>
-          <td><small>Skill giorno</small></td>
-          {% for weekday in range(7) %}
-          <td><input type="text" style="width:6rem" name="skill_override_{{ weekday }}"
-                     value="{{ st.skill_override_for_weekday(weekday) }}" placeholder="skill normale"
-                     title="Skill richiesta solo per questo giorno (vuoto = usa quella generale sopra)"></td>
-          {% endfor %}
-        </tr>
-      </tbody>
-    </table>
-    <br>
-    <button type="submit">✓ Salva</button>
-  </form>
-  <form class="inline" method="post" action="{{ url_for('main.duplicate_shift_type', shift_type_id=st.id) }}">
-    <button type="submit" class="secondary">⎘ Duplica turno</button>
-  </form>
-  <form class="inline" method="post" action="{{ url_for('main.delete_shift_type', shift_type_id=st.id) }}" onsubmit="return confirm('Eliminare il turno {{ st.name }}?');">
-    <button type="submit" class="danger">Elimina turno</button>
-  </form>
+        </div>
+
+        <div class="toolbar">
+          <label>Skill richiesta (OR con "|") <input type="text" name="skill_required" value="{{ st.skill_required or '' }}" placeholder="es. PR|SR"></label>
+          <label>Categorie escluse (CSV) <input type="text" name="excluded_categories" value="{{ st.excluded_categories or '' }}" placeholder="es. SP"></label>
+        </div>
+
+        <div class="toolbar">
+          <label><input type="checkbox" name="exclusive_day" {% if st.exclusive_day %}checked{% endif %}> Turno esclusivo (nessun altro turno lo stesso giorno)</label>
+          <label><input type="checkbox" name="requires_rest_next_day" {% if st.requires_rest_next_day %}checked{% endif %}> Richiede riposo il giorno dopo (smonto)</label>
+          <label>Eccezione smonto (turno ammesso sab→dom)
+            <select name="rest_exception_shift_type_id">
+              <option value="">-- nessuna --</option>
+              {% for other in shift_types %}
+              <option value="{{ other.id }}" {% if st.rest_exception_shift_type_id == other.id %}selected{% endif %}>{{ other.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Distanza minima tra due occorrenze (giorni) <input type="number" name="min_gap_days" min="0" value="{{ st.min_gap_days }}" style="width:4rem"></label>
+        </div>
+
+        <div class="toolbar">
+          <label><input type="checkbox" name="weekly_block" {% if st.weekly_block %}checked{% endif %}> Assegnato per l'intera settimana (es. corsia)</label>
+          <label>Rigore blocco
+            <input type="range" name="weekly_block_strictness" min="0" max="10" step="1"
+                   value="{{ st.weekly_block_strictness }}" oninput="this.nextElementSibling.textContent = this.value">
+            <output>{{ st.weekly_block_strictness }}</output>/10
+          </label>
+          <label>Gruppo equità settimanale <input type="text" name="block_group" value="{{ st.block_group or '' }}" placeholder="es. CORSIA" style="width:8rem"></label>
+        </div>
+        <div class="toolbar">
+          <small>Rigore blocco: 10 = ferrea (sempre la stessa persona tutta la settimana, come oggi) &middot;
+          valori piu' bassi permettono al risolutore di spostare la persona su un altro turno in un singolo
+          giorno della settimana se serve altrove (es. per una skill scoperta), con un costo che cresce con il
+          valore &middot; 0 = nessuna preferenza a restare sul blocco (massima liberta').</small>
+        </div>
+
+        <div class="toolbar">
+          <label><input type="checkbox" name="is_extra" {% if st.is_extra %}checked{% endif %}> Turno extra (attivabile solo su date specifiche, pagina "Extra")</label>
+          <label>Pool equità separato <input type="text" name="balance_pool" value="{{ st.balance_pool or '' }}" placeholder="es. EXTRA_ECONOMICO" style="width:10rem"></label>
+        </div>
+
+        <h3>Personale richiesto per giorno della settimana (non usato per turni "corsia" o "extra"; ignorato sab/dom se il turno fa parte di un ruolo weekend)</h3>
+        <table style="max-width:980px">
+          <thead><tr><th></th>{% for wd in weekday_names %}<th>{{ wd[:3] }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            <tr>
+              <td><small>Persone</small></td>
+              {% for weekday in range(7) %}
+              <td><input type="number" min="0" style="width:4rem" name="required_{{ weekday }}" value="{{ st.requirement_for_weekday(weekday) }}"></td>
+              {% endfor %}
+            </tr>
+            <tr>
+              <td><small>Skill giorno</small></td>
+              {% for weekday in range(7) %}
+              <td><input type="text" style="width:6rem" name="skill_override_{{ weekday }}"
+                         value="{{ st.skill_override_for_weekday(weekday) }}" placeholder="skill normale"
+                         title="Skill richiesta solo per questo giorno (vuoto = usa quella generale sopra)"></td>
+              {% endfor %}
+            </tr>
+          </tbody>
+        </table>
+        <br>
+        <button type="submit">✓ Salva</button>
+      </form>
+      <form class="inline" method="post" action="{{ url_for('main.duplicate_shift_type', shift_type_id=st.id) }}">
+        <button type="submit" class="secondary">⎘ Duplica turno</button>
+      </form>
+      <form class="inline" method="post" action="{{ url_for('main.delete_shift_type', shift_type_id=st.id) }}" onsubmit="return confirm('Eliminare il turno {{ st.name }}?');">
+        <button type="submit" class="danger">Elimina turno</button>
+      </form>
+    </div>
+  </details>
 </div>
 {% else %}
 <p>Nessun tipo di turno configurato.</p>
