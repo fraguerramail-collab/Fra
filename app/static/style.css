@@ -235,6 +235,12 @@ select.status-preferred_off { background: #fdf1de; }
 }
 .cell-editable:hover { background: #eef1fa; }
 
+.cell-slot-sub:not(:last-child) {
+  border-bottom: 1px dashed var(--border);
+  padding-bottom: 0.2rem;
+  margin-bottom: 0.2rem;
+}
+
 .skill-picker { position: relative; display: inline-block; }
 .skill-picker-toggle {
   background: #fff;

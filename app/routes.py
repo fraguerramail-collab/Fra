@@ -343,6 +343,7 @@ def _read_shift_type_form(st):
     st.block_group = request.form.get("block_group", "").strip() or None
     st.is_extra = request.form.get("is_extra") == "on"
     st.balance_pool = request.form.get("balance_pool", "").strip() or None
+    st.report_column = request.form.get("report_column", "").strip().upper() or None
 
 
 @bp.route("/turni", methods=["GET", "POST"])
@@ -773,6 +774,25 @@ def delete_extra_shift(item_id):
     return redirect(url_for("main.extra_shifts", anno=year, mese=month))
 
 
+def _report_columns(shift_types):
+    """Raggruppa i tipi di turno che condividono lo stesso 'report_column' in
+    un'unica colonna per pianificazione/report/CSV (es. 'Visite lun'+'Visite
+    gio', su giorni/orari diversi, mostrate insieme come 'VISITE'). Restano
+    turni distinti a tutti gli effetti per la generazione automatica: cambia
+    solo la visualizzazione."""
+    columns = []
+    by_key = {}
+    for st in shift_types:
+        key = st.report_column or f"__st{st.id}"
+        if key not in by_key:
+            col = {"key": key, "code": st.report_column or st.code,
+                   "name": st.report_column or st.name, "color": st.color, "members": []}
+            by_key[key] = col
+            columns.append(col)
+        by_key[key]["members"].append(st)
+    return columns
+
+
 # ---------------------------------------------------------------- pianificazione
 @bp.route("/pianificazione", methods=["GET"])
 def schedule():
@@ -782,11 +802,22 @@ def schedule():
 
     people = Employee.query.filter_by(active=True).order_by(Employee.name).all()
     types = ShiftType.query.order_by(ShiftType.sort_order).all()
+    columns = _report_columns(types)
 
     assignments = Assignment.query.filter_by(year=year, month=month).all()
     grid = {}
     for a in assignments:
         grid.setdefault((a.day, a.shift_type_id), []).append(a)
+
+    active_members_by_column_day = {}
+    for col in columns:
+        for day in range(1, num_days + 1):
+            weekday = (first_weekday + day - 1) % 7
+            active = [
+                st for st in col["members"]
+                if st.requirement_for_weekday(weekday) > 0 or grid.get((day, st.id))
+            ]
+            active_members_by_column_day[(col["key"], day)] = active or col["members"][:1]
 
     day_weekday_names = [WEEKDAY_NAMES[(first_weekday + d) % 7] for d in range(num_days)]
     edit_mode = request.args.get("modifica") == "1"
@@ -820,7 +851,9 @@ def schedule():
             pool_totals[pool][a.employee_id] = pool_totals[pool].get(a.employee_id, 0) + 1
 
     return render_template(
-        "schedule.html", employees=people, shift_types=types, year=year, month=month,
+        "schedule.html", employees=people, shift_types=types, columns=columns,
+        active_members_by_column_day=active_members_by_column_day,
+        year=year, month=month,
         month_name=MONTH_NAMES[month], month_names=MONTH_NAMES, day_range=range(1, num_days + 1),
         day_weekday_names=day_weekday_names, grid=grid, edit_mode=edit_mode, employees_json=employees_json,
         shift_type_meta_json=json.dumps(shift_type_meta),
@@ -1002,6 +1035,7 @@ def export_schedule_csv():
     year, month = _current_year_month()
     num_days = calendar.monthrange(year, month)[1]
     types = ShiftType.query.order_by(ShiftType.sort_order).all()
+    columns = _report_columns(types)
 
     assignments = Assignment.query.filter_by(year=year, month=month).all()
     grid = {}
@@ -1010,11 +1044,14 @@ def export_schedule_csv():
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Giorno"] + [st.name for st in types])
+    writer.writerow(["Giorno"] + [col["name"] for col in columns])
     for day in range(1, num_days + 1):
         row = [day]
-        for st in types:
-            row.append(", ".join(grid.get((day, st.id), [])))
+        for col in columns:
+            names = []
+            for st in col["members"]:
+                names.extend(grid.get((day, st.id), []))
+            row.append(", ".join(names))
         writer.writerow(row)
 
     mem = io.BytesIO(output.getvalue().encode("utf-8-sig"))
@@ -1028,9 +1065,11 @@ def report():
     year, month = _current_year_month()
     people = Employee.query.filter_by(active=True).order_by(Employee.name).all()
     types = ShiftType.query.order_by(ShiftType.sort_order).all()
+    columns = _report_columns(types)
+    column_key_by_shift_type = {st.id: col["key"] for col in columns for st in col["members"]}
     assignments = Assignment.query.filter_by(year=year, month=month).all()
 
-    counts = {emp.id: {"total": 0, "per_type": {}} for emp in people}
+    counts = {emp.id: {"total": 0, "per_type": {}, "per_column": {}} for emp in people}
     for a in assignments:
         if a.employee_id not in counts:
             continue
@@ -1038,6 +1077,8 @@ def report():
         counts[a.employee_id]["per_type"][a.shift_type_id] = (
             counts[a.employee_id]["per_type"].get(a.shift_type_id, 0) + 1
         )
+        col_key = column_key_by_shift_type.get(a.shift_type_id)
+        counts[a.employee_id]["per_column"][col_key] = counts[a.employee_id]["per_column"].get(col_key, 0) + 1
 
     rows = []
     for emp in people:
@@ -1054,7 +1095,7 @@ def report():
     rows.sort(key=lambda r: -r["counts"]["total"])
 
     return render_template(
-        "report.html", rows=rows, shift_types=types, year=year, month=month,
+        "report.html", rows=rows, shift_types=types, columns=columns, year=year, month=month,
         month_name=MONTH_NAMES[month], month_names=MONTH_NAMES,
     )
 

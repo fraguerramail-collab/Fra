@@ -82,6 +82,10 @@ class ShiftType(db.Model):
     is_extra = db.Column(db.Boolean, nullable=False, default=False)  # attivabile solo su date specifiche
     balance_pool = db.Column(db.String(40), nullable=True)  # pool di equita' separato (es. punti economici extra)
 
+    report_column = db.Column(db.String(40), nullable=True)  # turni diversi (giorni/orari) mostrati nella
+    # stessa colonna in pianificazione/report/CSV (es. "Visite lun"+"Visite gio" -> stessa colonna "VISITE").
+    # Restano turni distinti a tutti gli effetti per la generazione automatica: cambia solo la visualizzazione.
+
     rest_exception_shift_type = db.relationship("ShiftType", remote_side=[id])
     requirements = db.relationship(
         "ShiftRequirement", back_populates="shift_type", cascade="all, delete-orphan"

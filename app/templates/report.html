@@ -21,7 +21,7 @@
       <tr>
         <th>Dipendente</th>
         <th>Totale</th>
-        {% for st in shift_types %}<th>{{ st.code }}</th>{% endfor %}
+        {% for col in columns %}<th title="{{ col.name }}">{{ col.code }}</th>{% endfor %}
         <th>Alert</th>
       </tr>
     </thead>
@@ -30,11 +30,11 @@
       <tr {% if row.alerts %}style="background:#fdf1de"{% endif %}>
         <td>{{ row.employee.name }}</td>
         <td>{{ row.counts.total }}</td>
-        {% for st in shift_types %}<td>{{ row.counts.per_type.get(st.id, 0) }}</td>{% endfor %}
+        {% for col in columns %}<td>{{ row.counts.per_column.get(col.key, 0) }}</td>{% endfor %}
         <td>{{ row.alerts | join(', ') }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="{{ shift_types|length + 3 }}">Nessun dato per questo mese.</td></tr>
+      <tr><td colspan="{{ columns|length + 3 }}">Nessun dato per questo mese.</td></tr>
       {% endfor %}
     </tbody>
   </table>

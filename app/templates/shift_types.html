@@ -45,6 +45,8 @@
       <label>Codice <input type="text" name="code" value="{{ st.code }}" style="width:5rem"></label>
       <label>Gruppo <input type="text" name="group" value="{{ st.group or '' }}" style="width:9rem" placeholder="NOTTE, GUARDIA, CORSIA..."></label>
       <label>Colore <input type="color" name="color" value="{{ st.color }}"></label>
+      <label>Colonna nel report <input type="text" name="report_column" value="{{ st.report_column or '' }}" style="width:9rem" placeholder="vuoto = colonna propria"
+             title="Turni diversi (es. su giorni/orari diversi) con la stessa 'colonna nel report' vengono mostrati insieme nella stessa colonna in Pianificazione/Report/CSV, anche se restano turni distinti per la generazione automatica. Es: 'Visite (Lunedì)' e 'Visite (Giovedì)' -> scrivi VISITE su entrambi."></label>
     </div>
 
     <div class="toolbar">

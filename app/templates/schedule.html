@@ -52,8 +52,8 @@
       <thead>
         <tr>
           <th>G</th>
-          {% for st in shift_types %}
-          <th title="{{ st.name }}"><span class="pill" style="background: {{ st.color }}">{{ st.code }}</span></th>
+          {% for col in columns %}
+          <th title="{{ col.name }}"><span class="pill" style="background: {{ col.color }}">{{ col.code }}</span></th>
           {% endfor %}
         </tr>
       </thead>
@@ -61,20 +61,24 @@
         {% for day in day_range %}
         <tr>
           <td class="day-cell">{{ day }} <small>{{ day_weekday_names[day-1] }}</small></td>
-          {% for st in shift_types %}
-          {% set assigned = grid.get((day, st.id), []) %}
+          {% for col in columns %}
           <td class="cell-slot">
-            <input type="hidden" class="cell-value" data-day="{{ day }}" data-shift="{{ st.id }}"
-                   value="{{ assigned|map(attribute='employee_id')|map('string')|join(',') }}">
-            <div class="cell-editable" data-shift-name="{{ st.name }}" data-day="{{ day }}">
-              <div class="cell-chips">
-                {% if assigned %}
-                {% for a in assigned %}<span class="chip {{ '' if a.auto_generated else 'chip-manual' }}" title="{{ a.employee.name }}">{{ a.employee.code }}</span>{% endfor %}
-                {% else %}
-                <span class="empty-cell">—</span>
-                {% endif %}
+            {% for st in active_members_by_column_day.get((col.key, day), []) %}
+            {% set assigned = grid.get((day, st.id), []) %}
+            <div class="cell-slot-sub">
+              <input type="hidden" class="cell-value" data-day="{{ day }}" data-shift="{{ st.id }}"
+                     value="{{ assigned|map(attribute='employee_id')|map('string')|join(',') }}">
+              <div class="cell-editable" data-shift-name="{{ st.name }}" data-day="{{ day }}">
+                <div class="cell-chips">
+                  {% if assigned %}
+                  {% for a in assigned %}<span class="chip {{ '' if a.auto_generated else 'chip-manual' }}" title="{{ a.employee.name }}">{{ a.employee.code }}</span>{% endfor %}
+                  {% else %}
+                  <span class="empty-cell">—</span>
+                  {% endif %}
+                </div>
               </div>
             </div>
+            {% endfor %}
           </td>
           {% endfor %}
         </tr>
@@ -210,8 +214,8 @@ document.getElementById('schedule-form').addEventListener('submit', function () 
     <thead>
       <tr>
         <th>G</th>
-        {% for st in shift_types %}
-        <th title="{{ st.name }}"><span class="pill" style="background: {{ st.color }}">{{ st.code }}</span></th>
+        {% for col in columns %}
+        <th title="{{ col.name }}"><span class="pill" style="background: {{ col.color }}">{{ col.code }}</span></th>
         {% endfor %}
       </tr>
     </thead>
@@ -219,16 +223,20 @@ document.getElementById('schedule-form').addEventListener('submit', function () 
       {% for day in day_range %}
       <tr>
         <td class="day-cell">{{ day }} <small>{{ day_weekday_names[day-1] }}</small></td>
-        {% for st in shift_types %}
-        {% set assigned = grid.get((day, st.id), []) %}
+        {% for col in columns %}
         <td class="cell-slot">
-          {% if assigned %}
-          <div class="chip-list">
-            {% for a in assigned %}<span class="chip {{ '' if a.auto_generated else 'chip-manual' }}" title="{{ a.employee.name }}">{{ a.employee.code }}</span>{% endfor %}
+          {% for st in active_members_by_column_day.get((col.key, day), []) %}
+          {% set assigned = grid.get((day, st.id), []) %}
+          <div class="cell-slot-sub">
+            {% if assigned %}
+            <div class="chip-list">
+              {% for a in assigned %}<span class="chip {{ '' if a.auto_generated else 'chip-manual' }}" title="{{ a.employee.name }}">{{ a.employee.code }}</span>{% endfor %}
+            </div>
+            {% else %}
+            <span class="empty-cell">—</span>
+            {% endif %}
           </div>
-          {% else %}
-          <span class="empty-cell">—</span>
-          {% endif %}
+          {% endfor %}
         </td>
         {% endfor %}
       </tr>
