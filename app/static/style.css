@@ -280,6 +280,19 @@ select.status-preferred_off { background: #fdf1de; }
   margin-right: 0.3rem;
 }
 
+/* quando in una cella ci sono piu' sotto-turni lo stesso giorno (es. GG del
+   sabato = mattina+pomeriggio), rimpicciolisce solo li' i nomi cosi' la
+   colonna non si allarga rispetto agli altri giorni con un solo turno */
+.cell-slot-sub:not(:only-child):not(:last-child) {
+  padding-right: 0.12rem;
+  margin-right: 0.12rem;
+}
+.cell-slot-sub:not(:only-child) .chip {
+  padding: 0 0.15rem;
+  font-size: 0.58rem;
+  letter-spacing: -0.02em;
+}
+
 .skill-picker { position: relative; display: inline-block; }
 .skill-picker-toggle {
   background: #fff;
