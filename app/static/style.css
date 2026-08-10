@@ -282,17 +282,32 @@ select.status-preferred_off { background: #fdf1de; }
 }
 
 /* quando in una cella ci sono piu' sotto-turni lo stesso giorno (es. GG del
-   sabato = mattina+pomeriggio), rimpicciolisce solo li' i nomi cosi' la
-   colonna non si allarga rispetto agli altri giorni con un solo turno */
+   sabato = mattina+pomeriggio), rimpicciolisce molto solo li' i nomi, con
+   una larghezza massima fissa, cosi' la colonna non si allarga rispetto
+   agli altri giorni con un solo turno */
+.cell-slot-sub:not(:only-child) {
+  max-width: 1.5rem;
+  overflow: hidden;
+}
 .cell-slot-sub:not(:only-child):not(:last-child) {
-  padding-right: 0.12rem;
-  margin-right: 0.12rem;
+  padding-right: 0.05rem;
+  margin-right: 0.05rem;
+}
+.cell-slot-sub:not(:only-child) .cell-editable,
+.cell-slot-sub:not(:only-child) .chip-list,
+.cell-slot-sub:not(:only-child) .chip {
+  max-width: 1.5rem;
 }
 .cell-slot-sub:not(:only-child) .chip {
-  padding: 0 0.15rem;
-  font-size: 0.58rem;
-  letter-spacing: -0.02em;
+  display: inline-block;
+  padding: 0 0.06rem;
+  font-size: 0.4rem;
+  letter-spacing: -0.03em;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
 }
+.cell-slot-sub:not(:only-child) .empty-cell { font-size: 0.5rem; }
 
 .skill-picker { position: relative; display: inline-block; }
 .skill-picker-toggle {
