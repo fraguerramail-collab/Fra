@@ -63,6 +63,7 @@ body {
   margin: 0 auto;
   padding: 1.25rem;
 }
+.container.container-wide { max-width: 98vw; }
 
 .card {
   background: var(--card);
@@ -108,7 +109,7 @@ th, td {
 
 th { background: #f0f2f8; }
 
-.table-scroll { overflow: auto; max-height: 75vh; }
+.table-scroll { overflow: auto; max-height: 88vh; }
 .table-scroll table th:first-child,
 .table-scroll table td:first-child {
   position: sticky;
@@ -205,14 +206,14 @@ select.status-unavailable { background: #fbe4e8; }
 select.status-preferred_off { background: #fdf1de; }
 
 .avail-cell {
-  min-width: 1.9rem;
-  height: 1.5rem;
+  min-width: 1.3rem;
+  height: 1.05rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.68rem;
+  font-size: 0.56rem;
   font-weight: 700;
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
   user-select: none;
   color: var(--muted);
@@ -434,16 +435,16 @@ select.status-preferred_off { background: #fdf1de; }
 }
 .table-compact th .pill { font-size: 0.68rem; padding: 0.05rem 0.4rem; }
 
-.table-ultra-compact { font-size: 0.66rem; }
-.table-ultra-compact th, .table-ultra-compact td { padding: 0.06rem 0.18rem; }
-.table-ultra-compact .cell-slot { min-width: 40px; }
-.table-ultra-compact .cell-slot-sub:not(:last-child) { padding-right: 0.15rem; margin-right: 0.15rem; }
+.table-ultra-compact { font-size: 0.58rem; }
+.table-ultra-compact th, .table-ultra-compact td { padding: 0.02rem 0.1rem; }
+.table-ultra-compact .cell-slot { min-width: 28px; }
+.table-ultra-compact .cell-slot-sub:not(:last-child) { padding-right: 0.1rem; margin-right: 0.1rem; }
 .table-ultra-compact .day-cell { white-space: nowrap; font-weight: 600; }
 .table-ultra-compact .day-cell small { font-weight: 400; color: var(--muted); }
 .table-ultra-compact .chip {
-  padding: 0.02rem 0.28rem;
-  font-size: 0.62rem;
+  padding: 0.01rem 0.22rem;
+  font-size: 0.54rem;
   border-radius: 4px;
 }
-.table-ultra-compact th .pill { font-size: 0.58rem; padding: 0.02rem 0.3rem; }
-.table-ultra-compact .cell-editable { min-height: 1rem; padding: 0.05rem; }
+.table-ultra-compact th .pill { font-size: 0.52rem; padding: 0.01rem 0.28rem; }
+.table-ultra-compact .cell-editable { min-height: 0.85rem; padding: 0.02rem; }

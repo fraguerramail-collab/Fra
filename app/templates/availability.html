@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Disponibilità - Gestione Turni{% endblock %}
+{% block container_class %}container-wide{% endblock %}
 {% block content %}
 <h1>Disponibilità mensile</h1>
 
@@ -28,7 +29,7 @@
 
 <form method="post" action="{{ url_for('main.availability', anno=year, mese=month) }}" id="availability-form">
   <div class="card table-scroll">
-    <table class="table-compact">
+    <table class="table-ultra-compact">
       <thead>
         <tr>
           <th>Dipendente</th>
