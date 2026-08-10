@@ -16,20 +16,22 @@
 </form>
 
 <div class="card table-scroll">
-  <table>
+  <table class="table-compact">
     <thead>
       <tr>
         <th>Dipendente</th>
-        <th>Totale</th>
-        {% for col in columns %}<th title="{{ col.name }}">{{ col.code }}</th>{% endfor %}
+        <th>Tot.</th>
+        {% for col in columns %}
+        <th title="{{ col.name }}"><span class="pill" style="background: {{ col.color }}">{{ col.code }}</span></th>
+        {% endfor %}
         <th>Alert</th>
       </tr>
     </thead>
     <tbody>
       {% for row in rows %}
       <tr {% if row.alerts %}style="background:#fdf1de"{% endif %}>
-        <td>{{ row.employee.name }}</td>
-        <td>{{ row.counts.total }}</td>
+        <td class="day-cell">{{ row.employee.name }}</td>
+        <td><strong>{{ row.counts.total }}</strong></td>
         {% for col in columns %}<td>{{ row.counts.per_column.get(col.key, 0) }}</td>{% endfor %}
         <td>{{ row.alerts | join(', ') }}</td>
       </tr>

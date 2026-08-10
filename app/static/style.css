@@ -270,10 +270,14 @@ select.status-preferred_off { background: #fdf1de; }
 }
 .cell-editable:hover { background: #eef1fa; }
 
+.cell-slot-sub {
+  display: inline-block;
+  vertical-align: middle;
+}
 .cell-slot-sub:not(:last-child) {
-  border-bottom: 1px dashed var(--border);
-  padding-bottom: 0.2rem;
-  margin-bottom: 0.2rem;
+  border-right: 1px dashed var(--border);
+  padding-right: 0.3rem;
+  margin-right: 0.3rem;
 }
 
 .skill-picker { position: relative; display: inline-block; }
@@ -407,6 +411,7 @@ select.status-preferred_off { background: #fdf1de; }
 .table-compact { font-size: 0.76rem; }
 .table-compact th, .table-compact td { padding: 0.15rem 0.3rem; }
 .table-compact .cell-slot { min-width: 62px; }
+.table-compact .cell-slot-sub:not(:last-child) { padding-right: 0.2rem; margin-right: 0.2rem; }
 .table-compact .day-cell { white-space: nowrap; font-weight: 600; }
 .table-compact .day-cell small { font-weight: 400; color: var(--muted); }
 .table-compact .chip {
@@ -415,3 +420,17 @@ select.status-preferred_off { background: #fdf1de; }
   border-radius: 5px;
 }
 .table-compact th .pill { font-size: 0.68rem; padding: 0.05rem 0.4rem; }
+
+.table-ultra-compact { font-size: 0.66rem; }
+.table-ultra-compact th, .table-ultra-compact td { padding: 0.06rem 0.18rem; }
+.table-ultra-compact .cell-slot { min-width: 40px; }
+.table-ultra-compact .cell-slot-sub:not(:last-child) { padding-right: 0.15rem; margin-right: 0.15rem; }
+.table-ultra-compact .day-cell { white-space: nowrap; font-weight: 600; }
+.table-ultra-compact .day-cell small { font-weight: 400; color: var(--muted); }
+.table-ultra-compact .chip {
+  padding: 0.02rem 0.28rem;
+  font-size: 0.62rem;
+  border-radius: 4px;
+}
+.table-ultra-compact th .pill { font-size: 0.58rem; padding: 0.02rem 0.3rem; }
+.table-ultra-compact .cell-editable { min-height: 1rem; padding: 0.05rem; }
