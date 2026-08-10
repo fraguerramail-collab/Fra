@@ -191,6 +191,8 @@ class Settings(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     max_consecutive_work_days = db.Column(db.Integer, nullable=False, default=6)
+    last_year = db.Column(db.Integer, nullable=True)  # ultimo mese/anno usato, per riproporlo di default
+    last_month = db.Column(db.Integer, nullable=True)
 
     @classmethod
     def get(cls):

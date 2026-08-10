@@ -211,9 +211,19 @@ def load_example_catalog():
 
 
 def _current_year_month():
+    """Anno/mese correnti per le pagine con selettore mese: se non specificati
+    esplicitamente nell'URL, riparte dall'ultimo mese su cui si e' lavorato
+    (non dal mese reale di oggi), cosi' non si torna sempre ad agosto/oggi
+    passando da una pagina all'altra."""
+    settings = Settings.get()
     today = date.today()
-    year = request.args.get("anno", type=int) or today.year
-    month = request.args.get("mese", type=int) or today.month
+    year_param = request.args.get("anno", type=int)
+    month_param = request.args.get("mese", type=int)
+    year = year_param or settings.last_year or today.year
+    month = month_param or settings.last_month or today.month
+    if year_param and month_param and (year_param, month_param) != (settings.last_year, settings.last_month):
+        settings.last_year, settings.last_month = year_param, month_param
+        db.session.commit()
     return year, month
 
 
