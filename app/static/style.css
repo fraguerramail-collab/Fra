@@ -204,6 +204,41 @@ select.status-available { background: #e3f7ec; }
 select.status-unavailable { background: #fbe4e8; }
 select.status-preferred_off { background: #fdf1de; }
 
+.avail-cell {
+  min-width: 1.9rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--muted);
+}
+.avail-cell:hover { outline: 2px solid var(--primary); outline-offset: -2px; }
+.avail-cell.status-ok { background: transparent; }
+.avail-cell.status-no { background: #fbe4e8; color: var(--danger); }
+.avail-cell.status-ferie { background: #dbe6fb; color: #2f5fcc; }
+.avail-cell.status-mal { background: #fdf1de; color: var(--warning); }
+.avail-cell.status-partial { background: #efe3fb; color: #7a4fd1; }
+
+.brush-btn {
+  background: #fff;
+  color: var(--text);
+  border: 2px solid var(--border);
+  font-weight: 600;
+  font-size: 0.82rem;
+  padding: 0.3rem 0.6rem;
+}
+.brush-btn:hover { background: #fff; border-color: var(--primary); }
+.brush-btn[data-armed] { border-color: var(--primary); box-shadow: 0 0 0 2px #4f7cff33; }
+.brush-btn.status-no { color: var(--danger); }
+.brush-btn.status-ferie { color: #2f5fcc; }
+.brush-btn.status-mal { color: var(--warning); }
+.brush-btn.status-partial { color: #7a4fd1; }
+
 .cell-slot {
   min-width: 140px;
 }

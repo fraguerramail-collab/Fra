@@ -15,11 +15,20 @@
   <button type="submit">Vai</button>
 </form>
 
-<p>Per ogni dipendente e giorno, indica lo stato. Default: <strong>Disponibile</strong>.</p>
+<div class="card">
+  <strong>Pennello:</strong> scegli uno stato, poi clicca su una cella per impostarlo, oppure tieni premuto e trascina
+  per impostarlo su più celle insieme (di seguito, anche su righe diverse). Default: <strong>Disponibile</strong> (cella vuota).
+  <div class="toolbar" id="brush-toolbar" style="margin-top:0.4rem">
+    {% for value, label in options %}
+    {% set short, cls = short_map[value] %}
+    <button type="button" class="brush-btn {{ cls }}" data-status="{{ value }}" {% if value == 'NO' %}data-armed="1"{% endif %}>{{ label }}</button>
+    {% endfor %}
+  </div>
+</div>
 
-<form method="post" action="{{ url_for('main.availability', anno=year, mese=month) }}">
+<form method="post" action="{{ url_for('main.availability', anno=year, mese=month) }}" id="availability-form">
   <div class="card table-scroll">
-    <table>
+    <table class="table-compact">
       <thead>
         <tr>
           <th>Dipendente</th>
@@ -29,17 +38,13 @@
       <tbody>
         {% for emp in employees %}
         <tr>
-          <td>{{ emp.name }}</td>
+          <td class="day-cell">{{ emp.name }}</td>
           {% for day in day_range %}
           {% set current = avail_map.get((emp.id, day), 'OK') %}
-          <td>
-            <select name="a_{{ emp.id }}_{{ day }}" style="width:6.5rem"
-                    class="{% if current == 'OK' %}status-available{% else %}status-unavailable{% endif %}"
-                    onchange="this.className = this.value === 'OK' ? 'status-available' : 'status-unavailable'">
-              {% for value, label in options %}
-              <option value="{{ value }}" {% if current == value %}selected{% endif %}>{{ label }}</option>
-              {% endfor %}
-            </select>
+          {% set short, cls = short_map[current] %}
+          <td class="cell-slot">
+            <input type="hidden" class="avail-value" name="a_{{ emp.id }}_{{ day }}" value="{{ current }}">
+            <div class="avail-cell {{ cls }}" title="{{ emp.name }} — giorno {{ day }}">{{ short }}</div>
           </td>
           {% endfor %}
         </tr>
@@ -51,4 +56,43 @@
   </div>
   <button type="submit">Salva disponibilità</button>
 </form>
+
+<script>
+var armedStatus = document.querySelector('.brush-btn[data-armed]').dataset.status;
+var STATUS_SHORT = {{ short_map|tojson }};
+
+document.getElementById('brush-toolbar').addEventListener('click', function (e) {
+  var btn = e.target.closest('.brush-btn');
+  if (!btn) return;
+  armedStatus = btn.dataset.status;
+  document.querySelectorAll('.brush-btn').forEach(function (b) { b.removeAttribute('data-armed'); });
+  btn.setAttribute('data-armed', '1');
+});
+
+function paintCell(cellDiv) {
+  var wrapper = cellDiv.parentElement;
+  var input = wrapper.querySelector('.avail-value');
+  if (input.value === armedStatus) return;
+  input.value = armedStatus;
+  var parts = STATUS_SHORT[armedStatus] || ['', 'status-ok'];
+  cellDiv.textContent = parts[0];
+  cellDiv.className = 'avail-cell ' + parts[1];
+}
+
+var painting = false;
+var table = document.querySelector('#availability-form table');
+table.addEventListener('mousedown', function (e) {
+  var cell = e.target.closest('.avail-cell');
+  if (!cell) return;
+  e.preventDefault();
+  painting = true;
+  paintCell(cell);
+});
+table.addEventListener('mouseover', function (e) {
+  if (!painting) return;
+  var cell = e.target.closest('.avail-cell');
+  if (cell) paintCell(cell);
+});
+document.addEventListener('mouseup', function () { painting = false; });
+</script>
 {% endblock %}

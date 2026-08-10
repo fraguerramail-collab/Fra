@@ -56,6 +56,21 @@ AVAILABILITY_OPTIONS = [
     ("NO_POMERIGGIO|NO_NOTTE", "No pom.+notte"),
 ]
 
+# sigla breve + classe colore per ogni stato, per le celle compatte della
+# pagina disponibilità (pennello dipingi-celle invece del menu a tendina)
+AVAILABILITY_SHORT = {
+    "OK": ("", "status-ok"),
+    "NO": ("NO", "status-no"),
+    "FERIE": ("FE", "status-ferie"),
+    "MAL": ("MA", "status-mal"),
+    "NO_MATTINA": ("nM", "status-partial"),
+    "NO_POMERIGGIO": ("nP", "status-partial"),
+    "NO_NOTTE": ("nN", "status-partial"),
+    "NO_MATTINA|NO_POMERIGGIO": ("nMP", "status-partial"),
+    "NO_MATTINA|NO_NOTTE": ("nMN", "status-partial"),
+    "NO_POMERIGGIO|NO_NOTTE": ("nPN", "status-partial"),
+}
+
 
 FERIALI = {0, 1, 2, 3, 4}
 
@@ -654,7 +669,7 @@ def availability():
     return render_template(
         "availability.html", employees=people, year=year, month=month, month_name=MONTH_NAMES[month],
         num_days=num_days, day_range=range(1, num_days + 1), day_weekday_names=day_weekday_names,
-        avail_map=avail_map, options=AVAILABILITY_OPTIONS, month_names=MONTH_NAMES,
+        avail_map=avail_map, options=AVAILABILITY_OPTIONS, short_map=AVAILABILITY_SHORT, month_names=MONTH_NAMES,
     )
 
 
