@@ -586,6 +586,47 @@ def test_pinned_manual_assignment_is_not_duplicated_on_weekly_block():
     assert all(assignees == {1} for assignees in pinned_week_days.values())
 
 
+def test_pinned_assignment_wins_over_min_gap_history_conflict():
+    # Se un turno e' stato inserito a mano proprio in un giorno che la
+    # distanza minima (calcolata sullo storico del mese prima) vorrebbe
+    # vietare, l'inserimento manuale deve vincere: il risolutore non deve
+    # bloccarsi/fallire per una contraddizione tra le due regole.
+    solo = emp(1, "Solo", skills={"X"})
+    turno = shift(1, "Notte", skill_required="X", min_gap_days=3)
+
+    result = run(
+        employees=[solo], shift_types=[turno],
+        prev_shift_last_day={1: {1: 0}},
+        pinned_assignments={(1, 1, 2)},  # inserito a mano il giorno 2, dentro la finestra vietata
+    )
+
+    assert not any("nessuna soluzione" in w for w in result.warnings)
+    assignments_by_day = {a["day"]: a["employee_id"] for a in result.assignments if a["shift_type_id"] == 1}
+    assert assignments_by_day.get(2) == 1  # il pin manuale resta
+
+
+def test_pinned_week_wins_over_block_cooldown_conflict():
+    # Stessa cosa per il raffreddamento tra settimane: se la settimana e'
+    # stata assegnata a mano nonostante il raffreddamento, non deve
+    # mandare in stallo il risolutore.
+    solo = emp(1, "Solo", skills=set())
+    moda = ShiftTypeInput(
+        id=1, name="Corsia A", weekly_block=True, weekly_block_strictness=10,
+        block_group="CORSIA", block_cooldown_weeks=3,
+        days_set={0, 1, 2, 3, 4}, requirements_by_weekday={},
+    )
+
+    result = run(
+        employees=[solo], shift_types=[moda],
+        prev_block_group_last_day={"CORSIA": {1: 0}},
+        pinned_assignments={(1, 1, 5)},  # lunedi' 5 gennaio, dentro la finestra di raffreddamento
+    )
+
+    assert not any("nessuna soluzione" in w for w in result.warnings)
+    monday_assignees = {a["employee_id"] for a in result.assignments if a["day"] == 5 and a["shift_type_id"] == 1}
+    assert monday_assignees == {1}  # il pin manuale resta
+
+
 def test_pinned_manual_assignment_on_ordinary_shift_not_duplicated():
     ber = emp(1, "BER", skills={"X"})
     altro = emp(2, "TRI", skills={"X"})

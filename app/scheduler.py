@@ -322,7 +322,7 @@ def generate_schedule(
         weeks.setdefault(week_index(day), []).append(day)
 
     block_slots = []  # (shift_type, valid_days, required, eligible_ids)
-    block_group_owner_vars = {}  # block_group -> [(first_day, employee_id, y_var), ...]
+    block_group_owner_vars = {}  # block_group -> [(first_day, employee_id, shift_type_id, y_var), ...]
     for wk, days_in_week in sorted(weeks.items()):
         for shift_type in weekly_types:
             if shift_type.days_set:
@@ -366,7 +366,9 @@ def generate_schedule(
                 y = new_x(emp, shift_type.id, first_day)
                 day_vars_by_day[first_day].append(y)
                 if shift_type.block_group:
-                    block_group_owner_vars.setdefault(shift_type.block_group, []).append((first_day, emp_id, y))
+                    block_group_owner_vars.setdefault(shift_type.block_group, []).append(
+                        (first_day, emp_id, shift_type.id, y)
+                    )
                 if first_day in pinned_days_here:
                     model.Add(y == 1)
                 for dd in valid_days[1:]:
@@ -417,22 +419,32 @@ def generate_schedule(
     for group, cooldown_weeks in block_group_cooldown_weeks.items():
         min_gap_days_between_weeks = cooldown_weeks * 7
         owner_vars_by_employee = {}
-        for first_day, emp_id, y in block_group_owner_vars.get(group, []):
-            owner_vars_by_employee.setdefault(emp_id, []).append((first_day, y))
+        for first_day, emp_id, st_id, y in block_group_owner_vars.get(group, []):
+            is_pinned = emp_id in pinned_by_shift_day.get((st_id, first_day), set())
+            owner_vars_by_employee.setdefault(emp_id, []).append((first_day, y, is_pinned))
 
         for emp_id, week_owner_vars in owner_vars_by_employee.items():
             week_owner_vars.sort(key=lambda item: item[0])
             for i in range(len(week_owner_vars)):
-                d1, y1 = week_owner_vars[i]
+                d1, y1, pinned1 = week_owner_vars[i]
                 for j in range(i + 1, len(week_owner_vars)):
-                    d2, y2 = week_owner_vars[j]
+                    d2, y2, pinned2 = week_owner_vars[j]
                     if d2 - d1 >= min_gap_days_between_weeks:
                         break
+                    if pinned1 and pinned2:
+                        # entrambe le settimane inserite a mano nonostante il
+                        # raffreddamento: l'inserimento manuale vince su
+                        # entrambe, non forziamo un vincolo che le contraddirebbe.
+                        continue
                     model.Add(y1 + y2 <= 1)
 
             prev_last_day = prev_block_group_last_day.get(group, {}).get(emp_id)
             if prev_last_day is not None:
-                for first_day, y in week_owner_vars:
+                for first_day, y, is_pinned in week_owner_vars:
+                    if is_pinned:
+                        # inserito a mano nonostante il raffreddamento:
+                        # l'inserimento manuale vince, non lo forziamo a 0.
+                        continue
                     if first_day - prev_last_day < min_gap_days_between_weeks:
                         model.Add(y == 0)
 
@@ -580,6 +592,11 @@ def generate_schedule(
                         and weekday_of(prev_day) in (SATURDAY, SUNDAY)
                         and weekday_of(dd) in (SATURDAY, SUNDAY)
                     ):
+                        continue
+                    if emp.id in pinned_by_shift_day.get((shift_type.id, dd), set()):
+                        # inserito a mano nonostante la distanza: l'inserimento
+                        # manuale vince, non lo forziamo a 0 (creerebbe una
+                        # contraddizione col pin e renderebbe tutto irrisolvibile).
                         continue
                     v = get_x(emp.id, shift_type.id, dd)
                     if v is not None:
