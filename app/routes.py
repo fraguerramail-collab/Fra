@@ -246,6 +246,7 @@ def _build_shift_type_inputs(shift_types):
             days_set=st.days_set_list(), excluded_categories=st.excluded_category_list(),
             exclusive_day=st.exclusive_day, requires_rest_next_day=st.requires_rest_next_day,
             rest_exception_shift_type_id=st.rest_exception_shift_type_id, min_gap_days=st.min_gap_days,
+            min_gap_excludes_weekend=st.min_gap_excludes_weekend,
             weekly_block=st.weekly_block, weekly_block_strictness=st.weekly_block_strictness,
             block_group=st.block_group, is_extra=st.is_extra,
             balance_pool=st.balance_pool,
@@ -361,6 +362,7 @@ def _read_shift_type_form(st):
     rest_exc = request.form.get("rest_exception_shift_type_id", type=int)
     st.rest_exception_shift_type_id = rest_exc or None
     st.min_gap_days = request.form.get("min_gap_days", type=int) or 0
+    st.min_gap_excludes_weekend = request.form.get("min_gap_excludes_weekend") == "on"
     st.weekly_block = request.form.get("weekly_block") == "on"
     st.weekly_block_strictness = request.form.get("weekly_block_strictness", type=int)
     if st.weekly_block_strictness is None:
@@ -443,6 +445,7 @@ def duplicate_shift_type(shift_type_id):
         excluded_categories=src.excluded_categories, exclusive_day=src.exclusive_day,
         requires_rest_next_day=src.requires_rest_next_day,
         rest_exception_shift_type_id=src.rest_exception_shift_type_id, min_gap_days=src.min_gap_days,
+        min_gap_excludes_weekend=src.min_gap_excludes_weekend,
         weekly_block=src.weekly_block, weekly_block_strictness=src.weekly_block_strictness,
         block_group=src.block_group, is_extra=src.is_extra, balance_pool=src.balance_pool,
     )

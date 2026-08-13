@@ -69,6 +69,7 @@ class ShiftTypeInput:
     requires_rest_next_day: bool = False
     rest_exception_shift_type_id: int | None = None
     min_gap_days: int = 0
+    min_gap_excludes_weekend: bool = False  # non applicare la distanza minima tra sab+dom dello stesso weekend
     weekly_block: bool = False
     weekly_block_strictness: int = 10
     block_group: str | None = None
@@ -507,6 +508,12 @@ def generate_schedule(
                     d1, d2 = emp_days[i], emp_days[j]
                     if d2 - d1 > shift_type.min_gap_days:
                         break
+                    if (
+                        shift_type.min_gap_excludes_weekend
+                        and weekday_of(d1) in (SATURDAY, SUNDAY)
+                        and weekday_of(d2) in (SATURDAY, SUNDAY)
+                    ):
+                        continue
                     v1 = get_x(emp.id, shift_type.id, d1)
                     v2 = get_x(emp.id, shift_type.id, d2)
                     model.Add(v1 + v2 <= 1)

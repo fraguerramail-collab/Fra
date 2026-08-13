@@ -74,6 +74,8 @@ class ShiftType(db.Model):
     requires_rest_next_day = db.Column(db.Boolean, nullable=False, default=False)  # smonto
     rest_exception_shift_type_id = db.Column(db.Integer, db.ForeignKey("shift_type.id"), nullable=True)
     min_gap_days = db.Column(db.Integer, nullable=False, default=0)  # distanza minima tra due occorrenze stesso turno
+    min_gap_excludes_weekend = db.Column(db.Boolean, nullable=False, default=False)  # non conta sabato+domenica
+    # dello stesso weekend (utile per reperibilita' che devono restare consecutive nel weekend)
 
     weekly_block = db.Column(db.Boolean, nullable=False, default=False)  # assegnato per settimana intera (corsia)
     weekly_block_strictness = db.Column(db.Integer, nullable=False, default=10)  # 0=flessibile .. 10=ferrea

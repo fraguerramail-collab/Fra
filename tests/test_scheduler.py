@@ -68,6 +68,30 @@ def test_min_gap_days_spacing():
             assert b - a > 2
 
 
+def test_min_gap_excludes_weekend_allows_saturday_sunday_together():
+    # La reperibilita' del weekend DEVE restare sulla stessa persona sabato+
+    # domenica (un giorno di distanza), ma la distanza minima di 2 giorni
+    # servirebbe solo a evitare ripetizioni ravvicinate nei giorni feriali:
+    # con l'esclusione weekend attiva, il ruolo weekend resta coperto senza
+    # conflitto invece di andare in scopertura.
+    employees = [emp(1, "A", skills={"X"})]
+    reperibilita = shift(
+        1, "Reperibilita", skill_required="X", min_gap_days=2, min_gap_excludes_weekend=True,
+        requirements_by_weekday={},
+    )
+    weekend_roles = [
+        WeekendRoleInput(role_code="A", day="SAB", shift_type_id=1, skill_required="X"),
+        WeekendRoleInput(role_code="A", day="DOM", shift_type_id=1, skill_required="X"),
+    ]
+
+    result = run(employees=employees, shift_types=[reperibilita], weekend_roles=weekend_roles)
+
+    assignments_by_shift_day = {(a["shift_type_id"], a["day"]) for a in result.assignments}
+    assert (1, 3) in assignments_by_shift_day  # sabato 2026-01-03
+    assert (1, 4) in assignments_by_shift_day  # domenica 2026-01-04
+    assert not result.warnings
+
+
 def test_requires_rest_next_day_blocked_without_exception():
     employees = [emp(1, "A", skills={"X"})]
     night = shift(1, "Notte", skill_required="X", requires_rest_next_day=True, exclusive_day=True)

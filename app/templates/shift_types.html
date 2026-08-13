@@ -90,6 +90,8 @@
             </select>
           </label>
           <label>Distanza minima tra due occorrenze (giorni) <input type="number" name="min_gap_days" min="0" value="{{ st.min_gap_days }}" style="width:4rem"></label>
+          <label><input type="checkbox" name="min_gap_excludes_weekend" {% if st.min_gap_excludes_weekend %}checked{% endif %}>
+            Non contare sabato+domenica dello stesso weekend (per reperibilità che devono restare consecutive nel weekend)</label>
         </div>
 
         <div class="toolbar">
