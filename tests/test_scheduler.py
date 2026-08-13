@@ -68,6 +68,22 @@ def test_min_gap_days_spacing():
             assert b - a > 2
 
 
+def test_min_gap_days_respects_previous_month_history():
+    # Se e' stato fatto lo stesso turno l'ultimo giorno del mese precedente
+    # (giorno "0"), la distanza minima deve valere anche a inizio mese
+    # nuovo, non "dimenticarsi" tutto al cambio di mese.
+    solo = emp(1, "Solo", skills={"X"})
+    turno = shift(1, "Notte", skill_required="X", min_gap_days=3)
+
+    result = run(
+        employees=[solo], shift_types=[turno],
+        prev_shift_last_day={1: {1: 0}},
+    )
+
+    early_days = [a["day"] for a in result.assignments if a["day"] <= 3]
+    assert not early_days, f"non doveva essere assegnato nei primi 3 giorni: {early_days}"
+
+
 def test_min_gap_excludes_weekend_allows_saturday_sunday_together():
     # La reperibilita' del weekend DEVE restare sulla stessa persona sabato+
     # domenica (un giorno di distanza), ma la distanza minima di 2 giorni

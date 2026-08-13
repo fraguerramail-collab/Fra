@@ -180,10 +180,14 @@ def generate_schedule(
     # gruppo prima di questo mese, numerato come i giorni del mese corrente ma <= 0 (es. 0 = giorno prima
     # dell'1, -3 = quattro giorni prima dell'1): serve al raffreddamento tra settimane per farlo valere
     # anche a cavallo di mese, senza dover ricalcolare da zero ogni volta.
+    prev_shift_last_day=None,  # dict shift_type_id -> {employee_id: ultimo giorno (stessa numerazione <= 0
+    # di cui sopra) in cui e' stato assegnato a quel turno prima di questo mese: serve alla distanza minima
+    # tra due occorrenze dello stesso turno per farla valere anche a cavallo di mese.
 ):
     prev_month_last_shifts = prev_month_last_shifts or {}
     prev_month_weekend_count = prev_month_weekend_count or {}
     prev_block_group_last_day = prev_block_group_last_day or {}
+    prev_shift_last_day = prev_shift_last_day or {}
     skill_rules = skill_rules or []
     skill_block_set = {(r.skill, r.weekday) for r in skill_rules if r.mode == "BLOCK"}
     category_block_set = {(r.category, r.weekday) for r in skill_rules if r.mode == "BLOCK" and r.category}
@@ -562,6 +566,24 @@ def generate_schedule(
                     v1 = get_x(emp.id, shift_type.id, d1)
                     v2 = get_x(emp.id, shift_type.id, d2)
                     model.Add(v1 + v2 <= 1)
+
+            # stessa distanza minima anche rispetto all'ultima occorrenza nel
+            # mese precedente (altrimenti il vincolo "dimentica" tutto al
+            # cambio di mese, permettendo di ripetere il turno subito l'1).
+            prev_day = prev_shift_last_day.get(shift_type.id, {}).get(emp.id)
+            if prev_day is not None:
+                for dd in emp_days:
+                    if dd - prev_day > shift_type.min_gap_days:
+                        continue
+                    if (
+                        shift_type.min_gap_excludes_weekend
+                        and weekday_of(prev_day) in (SATURDAY, SUNDAY)
+                        and weekday_of(dd) in (SATURDAY, SUNDAY)
+                    ):
+                        continue
+                    v = get_x(emp.id, shift_type.id, dd)
+                    if v is not None:
+                        model.Add(v == 0)
 
     # "lavora quel giorno?" per ogni dipendente/giorno: serve sia per le
     # regole di riserva legate a una skill, sia per il limite di giorni

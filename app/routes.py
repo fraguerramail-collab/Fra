@@ -1058,6 +1058,28 @@ def generate():
                 emp_id: (d - target_first).days + 1 for emp_id, d in last_day_by_employee.items()
             }
 
+    # stessa logica per la distanza minima tra due occorrenze dello stesso
+    # turno (min_gap_days): senza questo, il vincolo "dimentica" tutto al
+    # cambio di mese e permette di ripetere subito il turno l'1.
+    prev_shift_last_day = {}
+    gap_shift_types = [st for st in types if st.min_gap_days > 0]
+    if gap_shift_types:
+        target_first = date(year, month, 1)
+        for st in gap_shift_types:
+            lookback_start = target_first - timedelta(days=st.min_gap_days)
+            rows = Assignment.query.filter_by(shift_type_id=st.id).all()
+            last_day_by_employee = {}
+            for a in rows:
+                a_date = date(a.year, a.month, a.day)
+                if a_date >= target_first or a_date < lookback_start:
+                    continue
+                if a.employee_id not in last_day_by_employee or a_date > last_day_by_employee[a.employee_id]:
+                    last_day_by_employee[a.employee_id] = a_date
+            if last_day_by_employee:
+                prev_shift_last_day[st.id] = {
+                    emp_id: (d - target_first).days + 1 for emp_id, d in last_day_by_employee.items()
+                }
+
     result = generate_schedule(
         year=year, month=month, employees=employee_inputs,
         shift_types=list(shift_type_inputs_by_id.values()), weekend_roles=weekend_role_inputs,
@@ -1068,6 +1090,7 @@ def generate():
         skill_rules=skill_rule_inputs,
         pinned_assignments=pinned_assignments,
         prev_block_group_last_day=prev_block_group_last_day,
+        prev_shift_last_day=prev_shift_last_day,
     )
 
     Assignment.query.filter_by(year=year, month=month, auto_generated=True).delete()
@@ -1108,6 +1131,21 @@ def generate():
     return redirect(url_for("main.schedule", anno=year, mese=month))
 
 
+def _manual_conflict_pairs(shift_types):
+    """Coppie di shift_type_id incompatibili lo stesso giorno per la stessa
+    persona (uno esclusivo, o fasce orarie sovrapposte) - stessa logica del
+    motore di generazione, ma qui serve solo per avvisare sui conflitti che
+    l'inserimento manuale non impedisce da solo."""
+    conflicts = set()
+    sts = list(shift_types)
+    for i in range(len(sts)):
+        for j in range(i + 1, len(sts)):
+            a, b = sts[i], sts[j]
+            if a.exclusive_day or b.exclusive_day or (a.time_band_list() & b.time_band_list()):
+                conflicts.add((a.id, b.id) if a.id < b.id else (b.id, a.id))
+    return conflicts
+
+
 @bp.route("/pianificazione/salva", methods=["POST"])
 def save_schedule():
     year = request.form.get("anno", type=int)
@@ -1115,6 +1153,7 @@ def save_schedule():
     num_days = calendar.monthrange(year, month)[1]
 
     types = ShiftType.query.all()
+    conflict_pairs = _manual_conflict_pairs(types)
 
     # una cella lasciata identica a prima resta con lo stesso stato (manuale/
     # automatica) che aveva; solo le celle effettivamente cambiate diventano
@@ -1124,6 +1163,7 @@ def save_schedule():
         old_cells.setdefault((a.day, a.shift_type_id), {})[a.employee_id] = a.auto_generated
 
     Assignment.query.filter_by(year=year, month=month).delete()
+    shift_types_by_day = {}  # (employee_id, day) -> [shift_type_id, ...], per l'avviso di conflitto
     for day in range(1, num_days + 1):
         for st in types:
             selected_ids = [int(x) for x in request.form.getlist(f"slot_{day}_{st.id}")]
@@ -1136,8 +1176,31 @@ def save_schedule():
                         auto_generated=bool(unchanged and old_cell.get(emp_id)),
                     )
                 )
+                shift_types_by_day.setdefault((emp_id, day), []).append(st.id)
     db.session.commit()
+
+    conflicts_found = []
+    people_by_id = {e.id: e for e in Employee.query.all()}
+    types_by_id = {st.id: st for st in types}
+    for (emp_id, day), st_ids in shift_types_by_day.items():
+        for i in range(len(st_ids)):
+            for j in range(i + 1, len(st_ids)):
+                pair = (st_ids[i], st_ids[j]) if st_ids[i] < st_ids[j] else (st_ids[j], st_ids[i])
+                if pair in conflict_pairs:
+                    conflicts_found.append((emp_id, day, pair))
+
     flash("Pianificazione salvata.", "success")
+    if conflicts_found:
+        flash(
+            f"Attenzione: {len(conflicts_found)} conflitto/i tra turni inseriti a mano (stessa persona, "
+            "stesso giorno, turni incompatibili tra loro):", "warning",
+        )
+        for emp_id, day, (a_id, b_id) in conflicts_found[:20]:
+            emp_name = people_by_id[emp_id].name if emp_id in people_by_id else "?"
+            flash(
+                f"{emp_name}, giorno {day}: '{types_by_id[a_id].name}' e '{types_by_id[b_id].name}' "
+                "non dovrebbero coesistere (uno esclusivo o stesse ore).", "warning-detail",
+            )
     return redirect(url_for("main.schedule", anno=year, mese=month, modifica=1))
 
 
