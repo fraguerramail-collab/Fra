@@ -102,12 +102,16 @@
             <output>{{ st.weekly_block_strictness }}</output>/10
           </label>
           <label>Gruppo equità settimanale <input type="text" name="block_group" value="{{ st.block_group or '' }}" placeholder="es. CORSIA" style="width:8rem"></label>
+          <label>Raffreddamento (settimane) <input type="number" name="block_cooldown_weeks" min="0" value="{{ st.block_cooldown_weeks }}" style="width:4rem"
+                 title="Chi possiede una settimana su questo turno non potra' possederne un'altra (nemmeno su un altro turno con lo stesso 'Gruppo equità settimanale') prima che passino tante settimane. 0 = nessun raffreddamento."></label>
         </div>
         <div class="toolbar">
           <small>Rigore blocco: 10 = ferrea (sempre la stessa persona tutta la settimana, come oggi) &middot;
           valori piu' bassi permettono al risolutore di spostare la persona su un altro turno in un singolo
           giorno della settimana se serve altrove (es. per una skill scoperta), con un costo che cresce con il
-          valore &middot; 0 = nessuna preferenza a restare sul blocco (massima liberta').</small>
+          valore &middot; 0 = nessuna preferenza a restare sul blocco (massima liberta'). Con il raffreddamento
+          attivo, se nessuno può prendere l'intera settimana conviene un rigore blocco sotto 10 (es. 7-8): così i
+          singoli giorni restano coperti da altre persone del gruppo invece di restare scoperti.</small>
         </div>
 
         <div class="toolbar">

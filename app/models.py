@@ -80,6 +80,9 @@ class ShiftType(db.Model):
     weekly_block = db.Column(db.Boolean, nullable=False, default=False)  # assegnato per settimana intera (corsia)
     weekly_block_strictness = db.Column(db.Integer, nullable=False, default=10)  # 0=flessibile .. 10=ferrea
     block_group = db.Column(db.String(40), nullable=True)  # raggruppa piu' turni weekly_block per l'equita'
+    block_cooldown_weeks = db.Column(db.Integer, nullable=False, default=0)  # 0=nessun raffreddamento: chi
+    # possiede una settimana su un turno di questo block_group non puo' possederne un'altra (in nessun turno
+    # dello stesso gruppo) prima che passino tante settimane quante impostate qui (conta anche il mese prima)
 
     is_extra = db.Column(db.Boolean, nullable=False, default=False)  # attivabile solo su date specifiche
     balance_pool = db.Column(db.String(40), nullable=True)  # pool di equita' separato (es. punti economici extra)

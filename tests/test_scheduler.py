@@ -304,6 +304,63 @@ def test_weekly_block_strictness_0_frees_up_the_owner_for_another_shift():
     assert any("Corsia" in w and "blocco settimanale" in w for w in result.warnings)
 
 
+def test_block_cooldown_prevents_owning_two_group_weeks_too_close():
+    # MODA e MODB condividono lo stesso 'block_group': chi possiede una
+    # settimana su uno dei due non puo' possederne un'altra (nemmeno
+    # sull'altro turno del gruppo) prima di 3 settimane (21 giorni).
+    employees = [emp(1, "A", skills=set()), emp(2, "B", skills=set())]
+    moda = ShiftTypeInput(
+        id=1, name="Corsia A", weekly_block=True, weekly_block_strictness=10,
+        block_group="CORSIA", block_cooldown_weeks=3,
+        days_set={0, 1, 2, 3, 4}, requirements_by_weekday={},
+    )
+    modb = ShiftTypeInput(
+        id=2, name="Corsia B", weekly_block=True, weekly_block_strictness=10,
+        block_group="CORSIA", block_cooldown_weeks=3,
+        days_set={0, 1, 2, 3, 4}, requirements_by_weekday={},
+    )
+
+    result = run(employees=employees, shift_types=[moda, modb], year=2026, month=3)
+
+    first_weekday, _ = monthrange(2026, 3)
+
+    def week_index(day):
+        return (day - 1 + first_weekday) // 7
+
+    owned_weeks_by_employee = {}
+    for a in result.assignments:
+        wk = week_index(a["day"])
+        owned_weeks_by_employee.setdefault(a["employee_id"], set()).add(wk)
+
+    for emp_id, weeks in owned_weeks_by_employee.items():
+        weeks_sorted = sorted(weeks)
+        for w1, w2 in zip(weeks_sorted, weeks_sorted[1:]):
+            assert (w2 - w1) * 7 >= 21, f"dipendente {emp_id}: settimane {w1} e {w2} troppo vicine"
+
+    # sanity check: qualcosa e' stato comunque coperto (non e' tutto vuoto)
+    assert result.assignments
+
+
+def test_block_cooldown_respects_previous_month_history():
+    # L'unico dipendente ha lavorato su CORSIA fino al giorno prima dell'1
+    # del mese precedente (giorno "0"): con 3 settimane (21 giorni) di
+    # raffreddamento non puo' possedere nessuna settimana che inizi prima
+    # del giorno 21.
+    solo = emp(1, "Solo", skills=set())
+    moda = ShiftTypeInput(
+        id=1, name="Corsia A", weekly_block=True, weekly_block_strictness=10,
+        block_group="CORSIA", block_cooldown_weeks=3,
+        days_set={0, 1, 2, 3, 4}, requirements_by_weekday={},
+    )
+
+    result = run(
+        employees=[solo], shift_types=[moda],
+        prev_block_group_last_day={"CORSIA": {1: 0}},
+    )
+
+    assert all(a["day"] >= 21 for a in result.assignments)
+
+
 def test_skill_by_weekday_overrides_general_skill_on_that_day_only():
     employees = [
         emp(1, "A", skills={"SALA2"}),

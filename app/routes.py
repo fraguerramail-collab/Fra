@@ -248,7 +248,7 @@ def _build_shift_type_inputs(shift_types):
             rest_exception_shift_type_id=st.rest_exception_shift_type_id, min_gap_days=st.min_gap_days,
             min_gap_excludes_weekend=st.min_gap_excludes_weekend,
             weekly_block=st.weekly_block, weekly_block_strictness=st.weekly_block_strictness,
-            block_group=st.block_group, is_extra=st.is_extra,
+            block_group=st.block_group, block_cooldown_weeks=st.block_cooldown_weeks, is_extra=st.is_extra,
             balance_pool=st.balance_pool,
             requirements_by_weekday={r.weekday: r.required_staff for r in st.requirements},
         )
@@ -368,6 +368,7 @@ def _read_shift_type_form(st):
     if st.weekly_block_strictness is None:
         st.weekly_block_strictness = 10
     st.block_group = request.form.get("block_group", "").strip() or None
+    st.block_cooldown_weeks = request.form.get("block_cooldown_weeks", type=int) or 0
     st.is_extra = request.form.get("is_extra") == "on"
     st.balance_pool = request.form.get("balance_pool", "").strip() or None
     st.report_column = request.form.get("report_column", "").strip().upper() or None
@@ -447,7 +448,8 @@ def duplicate_shift_type(shift_type_id):
         rest_exception_shift_type_id=src.rest_exception_shift_type_id, min_gap_days=src.min_gap_days,
         min_gap_excludes_weekend=src.min_gap_excludes_weekend,
         weekly_block=src.weekly_block, weekly_block_strictness=src.weekly_block_strictness,
-        block_group=src.block_group, is_extra=src.is_extra, balance_pool=src.balance_pool,
+        block_group=src.block_group, block_cooldown_weeks=src.block_cooldown_weeks,
+        is_extra=src.is_extra, balance_pool=src.balance_pool,
     )
     db.session.add(clone)
     db.session.flush()
@@ -794,15 +796,51 @@ def extra_shifts():
     if request.method == "POST":
         shift_type_id = request.form.get("shift_type_id", type=int)
         day = request.form.get("day", type=int)
+        end_year = request.form.get("end_year", type=int) or year
+        end_month = request.form.get("end_month", type=int) or month
+        end_day = request.form.get("end_day", type=int) or day
+        reason = request.form.get("reason", "").strip() or None
+
         if shift_type_id and day:
-            db.session.add(
-                ExtraShiftActivation(
-                    shift_type_id=shift_type_id, year=year, month=month, day=day,
-                    reason=request.form.get("reason", "").strip() or None,
-                )
-            )
+            shift_type = ShiftType.query.get(shift_type_id)
+            start_date = date(year, month, day)
+            end_date = date(end_year, end_month, end_day)
+            if shift_type is None:
+                return redirect(url_for("main.extra_shifts", anno=year, mese=month))
+            if end_date < start_date:
+                flash("La data di fine non puo' essere prima della data di inizio.", "warning")
+                return redirect(url_for("main.extra_shifts", anno=year, mese=month))
+
+            days_set = shift_type.days_set_list()
+            total_created = 0
+            total_skipped = 0
+            current = start_date
+            while current <= end_date:
+                weekday = current.weekday()  # 0=Lun .. 6=Dom, coerente con days_set
+                if days_set and weekday not in days_set:
+                    total_skipped += 1
+                else:
+                    exists = ExtraShiftActivation.query.filter_by(
+                        shift_type_id=shift_type_id, year=current.year, month=current.month, day=current.day,
+                    ).first()
+                    if not exists:
+                        db.session.add(
+                            ExtraShiftActivation(
+                                shift_type_id=shift_type_id, year=current.year, month=current.month,
+                                day=current.day, reason=reason,
+                            )
+                        )
+                        total_created += 1
+                current += timedelta(days=1)
+
             db.session.commit()
-            flash("Turno extra attivato.", "success")
+            if total_created:
+                msg = f"{total_created} giorno/i attivato/i per '{shift_type.name}'."
+                if total_skipped:
+                    msg += f" ({total_skipped} giorni ignorati perche' fuori dai giorni previsti per questo turno.)"
+                flash(msg, "success")
+            else:
+                flash("Nessun giorno attivato (gia' presenti o fuori dai giorni previsti per questo turno).", "warning")
         return redirect(url_for("main.extra_shifts", anno=year, mese=month))
 
     items = ExtraShiftActivation.query.filter_by(year=year, month=month).order_by(ExtraShiftActivation.day).all()
@@ -987,6 +1025,39 @@ def generate():
         for a in Assignment.query.filter_by(year=year, month=month, auto_generated=False).all()
     }
 
+    # memoria dei mesi precedenti per il raffreddamento tra settimane
+    # (block_cooldown_weeks): per ogni block_group con raffreddamento attivo,
+    # l'ultimo giorno lavorato da ciascun dipendente su un turno di quel
+    # gruppo, prima dell'inizio di questo mese, espresso con la stessa
+    # numerazione dei giorni di questo mese (0 = giorno prima dell'1, -3 =
+    # quattro giorni prima, ecc.), cosi' il raffreddamento vale anche a
+    # cavallo di mese senza dover ricalcolare tutto da capo ogni volta.
+    prev_block_group_last_day = {}
+    cooldown_groups = {
+        st.block_group: max(
+            (t.block_cooldown_weeks for t in types if t.block_group == st.block_group), default=0
+        )
+        for st in types if st.weekly_block and st.block_group and st.block_cooldown_weeks > 0
+    }
+    if cooldown_groups:
+        target_first = date(year, month, 1)
+        lookback_start = target_first - timedelta(weeks=max(cooldown_groups.values()) + 1)
+        for group in cooldown_groups:
+            group_shift_ids = [st.id for st in types if st.block_group == group]
+            if not group_shift_ids:
+                continue
+            rows = Assignment.query.filter(Assignment.shift_type_id.in_(group_shift_ids)).all()
+            last_day_by_employee = {}
+            for a in rows:
+                a_date = date(a.year, a.month, a.day)
+                if a_date >= target_first or a_date < lookback_start:
+                    continue
+                if a.employee_id not in last_day_by_employee or a_date > last_day_by_employee[a.employee_id]:
+                    last_day_by_employee[a.employee_id] = a_date
+            prev_block_group_last_day[group] = {
+                emp_id: (d - target_first).days + 1 for emp_id, d in last_day_by_employee.items()
+            }
+
     result = generate_schedule(
         year=year, month=month, employees=employee_inputs,
         shift_types=list(shift_type_inputs_by_id.values()), weekend_roles=weekend_role_inputs,
@@ -996,6 +1067,7 @@ def generate():
         max_consecutive_work_days=settings.max_consecutive_work_days,
         skill_rules=skill_rule_inputs,
         pinned_assignments=pinned_assignments,
+        prev_block_group_last_day=prev_block_group_last_day,
     )
 
     Assignment.query.filter_by(year=year, month=month, auto_generated=True).delete()

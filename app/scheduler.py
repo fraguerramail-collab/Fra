@@ -73,6 +73,7 @@ class ShiftTypeInput:
     weekly_block: bool = False
     weekly_block_strictness: int = 10
     block_group: str | None = None
+    block_cooldown_weeks: int = 0  # min. settimane prima di poter ripossedere una settimana nello stesso block_group
     is_extra: bool = False
     balance_pool: str | None = None
     requirements_by_weekday: dict = field(default_factory=dict)
@@ -175,9 +176,14 @@ def generate_schedule(
     pinned_assignments=None,  # set di (employee_id, shift_type_id, day) gia' inseriti a mano: il
     # risolutore li tratta come gia' occupati (contano sul fabbisogno, non si sommano un'altra
     # persona sopra) invece di ignorarli e assegnarne una in piu' per lo stesso posto.
+    prev_block_group_last_day=None,  # dict block_group -> {employee_id: ultimo giorno lavorato su quel
+    # gruppo prima di questo mese, numerato come i giorni del mese corrente ma <= 0 (es. 0 = giorno prima
+    # dell'1, -3 = quattro giorni prima dell'1): serve al raffreddamento tra settimane per farlo valere
+    # anche a cavallo di mese, senza dover ricalcolare da zero ogni volta.
 ):
     prev_month_last_shifts = prev_month_last_shifts or {}
     prev_month_weekend_count = prev_month_weekend_count or {}
+    prev_block_group_last_day = prev_block_group_last_day or {}
     skill_rules = skill_rules or []
     skill_block_set = {(r.skill, r.weekday) for r in skill_rules if r.mode == "BLOCK"}
     category_block_set = {(r.category, r.weekday) for r in skill_rules if r.mode == "BLOCK" and r.category}
@@ -312,6 +318,7 @@ def generate_schedule(
         weeks.setdefault(week_index(day), []).append(day)
 
     block_slots = []  # (shift_type, valid_days, required, eligible_ids)
+    block_group_owner_vars = {}  # block_group -> [(first_day, employee_id, y_var), ...]
     for wk, days_in_week in sorted(weeks.items()):
         for shift_type in weekly_types:
             if shift_type.days_set:
@@ -354,6 +361,8 @@ def generate_schedule(
                 pinned_days_here = {dd for dd in valid_days if emp_id in pinned_by_shift_day.get((shift_type.id, dd), set())}
                 y = new_x(emp, shift_type.id, first_day)
                 day_vars_by_day[first_day].append(y)
+                if shift_type.block_group:
+                    block_group_owner_vars.setdefault(shift_type.block_group, []).append((first_day, emp_id, y))
                 if first_day in pinned_days_here:
                     model.Add(y == 1)
                 for dd in valid_days[1:]:
@@ -386,6 +395,42 @@ def generate_schedule(
                 model.Add(sum(day_vars) <= capacity)
                 objective_terms.append(SHORTFALL_PENALTY * (required - sum(day_vars)))
             block_slots.append((shift_type, valid_days, required, eligible_ids))
+
+    # raffreddamento tra settimane per 'block_group': chi possiede una settimana
+    # su un turno del gruppo (es. Corsia A) non puo' possederne un'altra (nello
+    # stesso turno o in un altro dello stesso gruppo, es. Corsia B) prima che
+    # passino le settimane configurate. Se il rigore del blocco e' < 10, i
+    # singoli giorni restano comunque copribili da qualcun altro del pool
+    # idoneo (vedi vincolo di copertura sopra), quindi il raffreddamento non
+    # lascia scoperture: sposta solo *chi* puo' possedere l'intera settimana.
+    block_group_cooldown_weeks = {}
+    for st in weekly_types:
+        if st.block_group and st.block_cooldown_weeks > 0:
+            block_group_cooldown_weeks[st.block_group] = max(
+                block_group_cooldown_weeks.get(st.block_group, 0), st.block_cooldown_weeks
+            )
+
+    for group, cooldown_weeks in block_group_cooldown_weeks.items():
+        min_gap_days_between_weeks = cooldown_weeks * 7
+        owner_vars_by_employee = {}
+        for first_day, emp_id, y in block_group_owner_vars.get(group, []):
+            owner_vars_by_employee.setdefault(emp_id, []).append((first_day, y))
+
+        for emp_id, week_owner_vars in owner_vars_by_employee.items():
+            week_owner_vars.sort(key=lambda item: item[0])
+            for i in range(len(week_owner_vars)):
+                d1, y1 = week_owner_vars[i]
+                for j in range(i + 1, len(week_owner_vars)):
+                    d2, y2 = week_owner_vars[j]
+                    if d2 - d1 >= min_gap_days_between_weeks:
+                        break
+                    model.Add(y1 + y2 <= 1)
+
+            prev_last_day = prev_block_group_last_day.get(group, {}).get(emp_id)
+            if prev_last_day is not None:
+                for first_day, y in week_owner_vars:
+                    if first_day - prev_last_day < min_gap_days_between_weeks:
+                        model.Add(y == 0)
 
     # ------------------------------------------------------- turni giornalieri ordinari
     ordinary_types = [st for st in shift_types if not st.weekly_block and not st.is_extra]
