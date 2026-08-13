@@ -182,13 +182,18 @@ def generate_schedule(
     category_block_set = {(r.category, r.weekday) for r in skill_rules if r.mode == "BLOCK" and r.category}
     skill_reserve_rules = [r for r in skill_rules if r.mode == "RESERVE"]
     pinned_assignments = pinned_assignments or set()
+    employees_by_id = {e.id: e for e in employees}
     pinned_by_shift_day = {}
     for emp_id, st_id, day in pinned_assignments:
+        # ignora un'assegnazione manuale che punta a un dipendente non piu'
+        # attivo (o comunque non nella lista corrente): non c'e' nessuna
+        # variabile del risolutore per lui a cui agganciare il 'pin'.
+        if emp_id not in employees_by_id:
+            continue
         pinned_by_shift_day.setdefault((st_id, day), set()).add(emp_id)
 
     first_weekday, num_days = monthrange(year, month)
     shift_types_by_id = {st.id: st for st in shift_types}
-    employees_by_id = {e.id: e for e in employees}
     warnings = []
 
     def weekday_of(day):

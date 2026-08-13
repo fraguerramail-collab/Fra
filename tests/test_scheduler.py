@@ -498,3 +498,21 @@ def test_pinned_manual_assignment_on_ordinary_shift_not_duplicated():
 
     day5_assignees = {a["employee_id"] for a in result.assignments if a["day"] == 5}
     assert day5_assignees == {1}
+
+
+def test_pinned_assignment_for_employee_no_longer_in_the_list_is_ignored_not_crashed():
+    # Un'assegnazione manuale puo' riferirsi a un dipendente nel frattempo
+    # disattivato (quindi assente da 'employees'): deve solo essere ignorata
+    # dal risolutore, non far esplodere la generazione con un errore.
+    solo = emp(1, "Solo", skills=set())
+    moda = ShiftTypeInput(
+        id=1, name="Corsia A", weekly_block=True, weekly_block_strictness=10,
+        days_set={0, 1, 2, 3, 4}, requirements_by_weekday={},
+    )
+
+    result = run(
+        employees=[solo], shift_types=[moda],
+        pinned_assignments={(999, 1, 5)},  # 999 non e' tra gli 'employees'
+    )
+
+    assert isinstance(result.assignments, list)  # non e' esploso
