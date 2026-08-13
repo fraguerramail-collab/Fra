@@ -598,6 +598,12 @@ def _known_skills():
     return sorted(skills)
 
 
+def _known_categories():
+    """Tutte le fasce/categorie in uso tra i dipendenti, per suggerirle nel
+    form delle regole per categoria (es. 'specializzando')."""
+    return sorted({e.category for e in Employee.query.all() if e.category})
+
+
 # ---------------------------------------------------------------- regole
 @bp.route("/regole", methods=["GET", "POST"])
 def rules():
@@ -607,29 +613,45 @@ def rules():
         db.session.commit()
         flash("Regole salvate.", "success")
         return redirect(url_for("main.rules"))
-    skill_rules = SkillRule.query.order_by(SkillRule.skill, SkillRule.weekday).all()
+    skill_rules = SkillRule.query.order_by(SkillRule.category, SkillRule.skill, SkillRule.weekday).all()
 
     active_skills = set()
+    active_categories = set()
     for e in Employee.query.filter_by(active=True).all():
         active_skills.update(parse_csv(e.skills))
-    rules_with_status = [(r, r.skill not in active_skills) for r in skill_rules]
+        if e.category:
+            active_categories.add(e.category)
+    rules_with_status = [
+        (r, (r.category not in active_categories) if r.category else (r.skill not in active_skills))
+        for r in skill_rules
+    ]
 
     return render_template(
         "rules.html", settings=settings, rules_with_status=rules_with_status,
-        weekday_names=WEEKDAY_NAMES, known_skills=_known_skills(),
+        weekday_names=WEEKDAY_NAMES, known_skills=_known_skills(), known_categories=_known_categories(),
     )
 
 
 @bp.route("/regole/skill", methods=["POST"])
 def add_skill_rule():
     skill = request.form.get("skill", "").strip()
-    weekday = request.form.get("weekday", type=int)
+    category = request.form.get("category", "").strip()
+    weekdays = request.form.getlist("weekday", type=int)
     mode = request.form.get("mode", "").strip()
     min_free = request.form.get("min_free", type=int) or 1
-    if skill and weekday is not None and mode in ("BLOCK", "RESERVE"):
-        db.session.add(SkillRule(skill=skill, weekday=weekday, mode=mode, min_free=min_free))
+    if category:
+        # le regole per categoria valgono solo come BLOCK (es. "niente weekend
+        # per gli specializzandi"): RESERVE per categoria non e' implementato.
+        for weekday in weekdays:
+            db.session.add(SkillRule(skill="", category=category, weekday=weekday, mode="BLOCK", min_free=min_free))
+        if weekdays:
+            db.session.commit()
+            flash(f"Regola categoria aggiunta ({len(weekdays)} giorno/i).", "success")
+    elif skill and weekdays and mode in ("BLOCK", "RESERVE"):
+        for weekday in weekdays:
+            db.session.add(SkillRule(skill=skill, weekday=weekday, mode=mode, min_free=min_free))
         db.session.commit()
-        flash("Regola skill aggiunta.", "success")
+        flash(f"Regola skill aggiunta ({len(weekdays)} giorno/i).", "success")
     return redirect(url_for("main.rules"))
 
 
@@ -950,9 +972,17 @@ def generate():
             prev_month_weekend_count[a.employee_id] = 1
 
     skill_rule_inputs = [
-        SkillRuleInput(skill=r.skill, weekday=r.weekday, mode=r.mode, min_free=r.min_free)
+        SkillRuleInput(skill=r.skill, weekday=r.weekday, mode=r.mode, min_free=r.min_free, category=r.category)
         for r in SkillRule.query.all()
     ]
+
+    # turni gia' inseriti a mano per questo mese: il risolutore li tratta come
+    # gia' occupati (contano sul fabbisogno) invece di ignorarli e rischiare
+    # di assegnarne un altro in piu' per lo stesso posto.
+    pinned_assignments = {
+        (a.employee_id, a.shift_type_id, a.day)
+        for a in Assignment.query.filter_by(year=year, month=month, auto_generated=False).all()
+    }
 
     result = generate_schedule(
         year=year, month=month, employees=employee_inputs,
@@ -962,6 +992,7 @@ def generate():
         prev_month_weekend_count=prev_month_weekend_count,
         max_consecutive_work_days=settings.max_consecutive_work_days,
         skill_rules=skill_rule_inputs,
+        pinned_assignments=pinned_assignments,
     )
 
     Assignment.query.filter_by(year=year, month=month, auto_generated=True).delete()

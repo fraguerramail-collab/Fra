@@ -169,18 +169,22 @@ class Preference(db.Model):
 
 
 class SkillRule(db.Model):
-    """Regola trasversale legata a una skill (non a un turno specifico).
+    """Regola trasversale legata a una skill oppure a una categoria/fascia
+    (non a un turno specifico). Una riga usa l'uno O l'altro campo, non
+    entrambi.
 
-    BLOCK: chi ha questa skill non e' assegnabile a NESSUN turno in questo
-    giorno della settimana (es. impegnato in un'attivita' fuori app).
+    BLOCK: chi ha questa skill (o questa categoria, es. 'specializzando')
+    non e' assegnabile a NESSUN turno in questo giorno della settimana
+    (es. impegnato in un'attivita' fuori app, oppure escluso dai weekend).
     RESERVE: tra chi ha questa skill, almeno 'min_free' restano liberi
-    (non assegnati a nulla) in questo giorno della settimana.
+    (non assegnati a nulla) in questo giorno della settimana (solo skill).
     """
 
     __tablename__ = "skill_rule"
 
     id = db.Column(db.Integer, primary_key=True)
-    skill = db.Column(db.String(60), nullable=False)
+    skill = db.Column(db.String(60), nullable=False, default="")  # vuota se la regola e' per categoria
+    category = db.Column(db.String(60), nullable=True)
     weekday = db.Column(db.Integer, nullable=False)  # 0=Lunedì .. 6=Domenica
     mode = db.Column(db.String(10), nullable=False)  # BLOCK / RESERVE
     min_free = db.Column(db.Integer, nullable=False, default=1)

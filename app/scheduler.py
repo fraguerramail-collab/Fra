@@ -97,18 +97,22 @@ class PreferenceInput:
 
 @dataclass
 class SkillRuleInput:
-    """Regola trasversale legata a una skill, non a un turno specifico.
+    """Regola trasversale legata a una skill (o a una categoria/fascia), non
+    a un turno specifico.
 
-    BLOCK: chi ha questa skill non puo' essere assegnato a NESSUN turno in
-    questo giorno della settimana (es. dedicato ad attivita' fuori app).
-    RESERVE: tra chi ha questa skill, almeno 'min_free' devono restare
-    liberi (non assegnati a nulla) in questo giorno della settimana.
+    BLOCK: chi ha questa skill (o questa categoria, es. 'specializzando')
+    non puo' essere assegnato a NESSUN turno in questo giorno della
+    settimana (es. dedicato ad attivita' fuori app, oppure escluso dai
+    weekend). RESERVE: tra chi ha questa skill, almeno 'min_free' devono
+    restare liberi (non assegnati a nulla) in questo giorno della
+    settimana (solo per skill, non per categoria).
     """
 
     skill: str
     weekday: int  # 0=Lunedì .. 6=Domenica
     mode: str  # "BLOCK" o "RESERVE"
     min_free: int = 1
+    category: str | None = None  # se impostata, la regola BLOCK vale per categoria invece che per skill
 
 
 @dataclass
@@ -167,15 +171,24 @@ def generate_schedule(
     prev_month_weekend_count=None,  # dict employee_id -> weekend lavorati nell'ultimo weekend del mese precedente (bool-like int)
     max_consecutive_work_days=6,
     skill_rules=None,  # lista di SkillRuleInput
+    pinned_assignments=None,  # set di (employee_id, shift_type_id, day) gia' inseriti a mano: il
+    # risolutore li tratta come gia' occupati (contano sul fabbisogno, non si sommano un'altra
+    # persona sopra) invece di ignorarli e assegnarne una in piu' per lo stesso posto.
 ):
     prev_month_last_shifts = prev_month_last_shifts or {}
     prev_month_weekend_count = prev_month_weekend_count or {}
     skill_rules = skill_rules or []
     skill_block_set = {(r.skill, r.weekday) for r in skill_rules if r.mode == "BLOCK"}
+    category_block_set = {(r.category, r.weekday) for r in skill_rules if r.mode == "BLOCK" and r.category}
     skill_reserve_rules = [r for r in skill_rules if r.mode == "RESERVE"]
+    pinned_assignments = pinned_assignments or set()
+    pinned_by_shift_day = {}
+    for emp_id, st_id, day in pinned_assignments:
+        pinned_by_shift_day.setdefault((st_id, day), set()).add(emp_id)
 
     first_weekday, num_days = monthrange(year, month)
     shift_types_by_id = {st.id: st for st in shift_types}
+    employees_by_id = {e.id: e for e in employees}
     warnings = []
 
     def weekday_of(day):
@@ -199,6 +212,8 @@ def generate_schedule(
         if not is_available(emp.id, day, shift_type):
             return False
         if any((skill, weekday) in skill_block_set for skill in emp.skills):
+            return False
+        if (emp.category, weekday) in category_block_set:
             return False
         return True
 
@@ -252,6 +267,11 @@ def generate_schedule(
             for shift_type, day_, weekday_, skill_formula in entries:
                 day_ids = {e.id for e in employees if eligible(e, shift_type, day_, weekday_, skill_formula)}
                 eligible_ids = day_ids if eligible_ids is None else (eligible_ids & day_ids)
+            eligible_ids = set(eligible_ids or set())
+            pinned_ids = set()
+            for shift_type, day_, _weekday_, _ in entries:
+                pinned_ids |= pinned_by_shift_day.get((shift_type.id, day_), set())
+            eligible_ids |= pinned_ids
 
             if not eligible_ids:
                 warnings.append(
@@ -259,19 +279,20 @@ def generate_schedule(
                 )
                 continue
 
-            by_id = {e.id: e for e in employees}
             first_st, first_day, first_weekday_, _ = entries[0]
             role_vars = []
             for emp_id in eligible_ids:
-                emp = by_id[emp_id]
+                emp = employees_by_id[emp_id]
                 y = new_x(emp, first_st.id, first_day)
                 role_vars.append(y)
                 weekend_role_vars_by_employee[emp_id].append(y)
                 for shift_type, day_, weekday_, _ in entries[1:]:
                     x_other = new_x(emp, shift_type.id, day_)
                     model.Add(x_other == y)
+                if emp_id in pinned_ids:
+                    model.Add(y == 1)
 
-            model.Add(sum(role_vars) <= 1)
+            model.Add(sum(role_vars) <= max(1, len(pinned_ids)))
             objective_terms.append(SHORTFALL_PENALTY * (1 - sum(role_vars)))
             role_slots.append((role_code, sab_day, dom_day, role_vars))
 
@@ -306,6 +327,11 @@ def generate_schedule(
                 skill_override = shift_type.skill_by_weekday.get(weekday_)
                 day_ids = {e.id for e in employees if eligible(e, shift_type, dd, weekday_, skill_override)}
                 eligible_ids = day_ids if eligible_ids is None else (eligible_ids & day_ids)
+            eligible_ids = set(eligible_ids or set())
+            pinned_ids_this_week = set()
+            for dd in valid_days:
+                pinned_ids_this_week |= pinned_by_shift_day.get((shift_type.id, dd), set())
+            eligible_ids |= pinned_ids_this_week
 
             if not eligible_ids:
                 warnings.append(
@@ -313,17 +339,22 @@ def generate_schedule(
                 )
                 continue
 
-            by_id = {e.id: e for e in employees}
             first_day = valid_days[0]
             required = max([1] + [shift_type.requirements_by_weekday.get(weekday_of(dd), 0) for dd in valid_days])
+            capacity = max(required, len(pinned_ids_this_week))
             day_vars_by_day = {dd: [] for dd in valid_days}
             for emp_id in eligible_ids:
-                emp = by_id[emp_id]
+                emp = employees_by_id[emp_id]
+                pinned_days_here = {dd for dd in valid_days if emp_id in pinned_by_shift_day.get((shift_type.id, dd), set())}
                 y = new_x(emp, shift_type.id, first_day)
                 day_vars_by_day[first_day].append(y)
+                if first_day in pinned_days_here:
+                    model.Add(y == 1)
                 for dd in valid_days[1:]:
                     x_other = new_x(emp, shift_type.id, dd)
                     day_vars_by_day[dd].append(x_other)
+                    if dd in pinned_days_here:
+                        model.Add(x_other == 1)
                     if shift_type.weekly_block_strictness >= 10:
                         model.Add(x_other == y)
                     else:
@@ -346,7 +377,7 @@ def generate_schedule(
             # giorno della settimana, non solo al primo.
             for dd in valid_days:
                 day_vars = day_vars_by_day[dd]
-                model.Add(sum(day_vars) <= required)
+                model.Add(sum(day_vars) <= capacity)
                 objective_terms.append(SHORTFALL_PENALTY * (required - sum(day_vars)))
             block_slots.append((shift_type, valid_days, required, eligible_ids))
 
@@ -369,10 +400,20 @@ def generate_schedule(
                 continue
 
             skill_override = shift_type.skill_by_weekday.get(weekday)
-            candidates = [e for e in employees if eligible(e, shift_type, day, weekday, skill_override)]
-            slot_vars = [new_x(e, shift_type.id, day) for e in candidates]
+            pinned_ids = pinned_by_shift_day.get((shift_type.id, day), set())
+            candidates = [
+                e for e in employees
+                if eligible(e, shift_type, day, weekday, skill_override) or e.id in pinned_ids
+            ]
+            capacity = max(required, len(pinned_ids))
+            slot_vars = []
+            for e in candidates:
+                v = new_x(e, shift_type.id, day)
+                slot_vars.append(v)
+                if e.id in pinned_ids:
+                    model.Add(v == 1)
             if slot_vars:
-                model.Add(sum(slot_vars) <= required)
+                model.Add(sum(slot_vars) <= capacity)
             ordinary_slots.append((shift_type, day, weekday, required, slot_vars))
             objective_terms.append(SHORTFALL_PENALTY * (required - sum(slot_vars)))
 
@@ -385,10 +426,20 @@ def generate_schedule(
             if shift_type is None:
                 continue
             skill_override = shift_type.skill_by_weekday.get(weekday)
-            candidates = [e for e in employees if eligible(e, shift_type, day, weekday, skill_override)]
-            slot_vars = [new_x(e, shift_type.id, day) for e in candidates]
+            pinned_ids = pinned_by_shift_day.get((shift_type.id, day), set())
+            candidates = [
+                e for e in employees
+                if eligible(e, shift_type, day, weekday, skill_override) or e.id in pinned_ids
+            ]
+            capacity = max(1, len(pinned_ids))
+            slot_vars = []
+            for e in candidates:
+                v = new_x(e, shift_type.id, day)
+                slot_vars.append(v)
+                if e.id in pinned_ids:
+                    model.Add(v == 1)
             if slot_vars:
-                model.Add(sum(slot_vars) <= 1)
+                model.Add(sum(slot_vars) <= capacity)
             extra_slots.append((shift_type, day, weekday, slot_vars))
             objective_terms.append(SHORTFALL_PENALTY * (1 - sum(slot_vars)))
 

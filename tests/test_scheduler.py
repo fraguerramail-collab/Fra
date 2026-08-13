@@ -433,3 +433,68 @@ def test_skill_rule_reserve_keeps_at_least_one_free():
     assert any(
         "candidati" in w or "coperto" in w for w in result.warnings
     )  # il fabbisogno di 3 non e' piu' copribile con la riserva attiva
+
+
+def test_category_rule_blocks_weekend_for_specializzandi():
+    # Uno specializzando non deve mai comparire sabato o domenica, un
+    # dipendente normale invece si', per non lasciare tutto scoperto.
+    specializzando = emp(1, "Spec", category="SPEC", skills={"X"})
+    strutturato = emp(2, "Strutt", category="STRUTT", skills={"X"})
+    shift_types = [shift(1, "Turno", skill_required="X")]
+    skill_rules = [
+        SkillRuleInput(skill="", category="SPEC", weekday=5, mode="BLOCK"),
+        SkillRuleInput(skill="", category="SPEC", weekday=6, mode="BLOCK"),
+    ]
+
+    result = run(employees=[specializzando, strutturato], shift_types=shift_types, skill_rules=skill_rules)
+
+    # 2026-01-03 e' sabato, 2026-01-04 e' domenica
+    weekend_assignees = {a["employee_id"] for a in result.assignments if a["day"] in (3, 4)}
+    assert 1 not in weekend_assignees
+    assert 2 in weekend_assignees
+    # nei giorni feriali lo specializzando resta assegnabile normalmente (in
+    # almeno un giorno feriale: con 2 persone equivalenti la fairness puo'
+    # scegliere l'una o l'altra nel singolo giorno, ma non e' mai escluso).
+    weekday_assignees = {a["employee_id"] for a in result.assignments if a["day"] not in (3, 4, 10, 11, 17, 18, 24, 25, 31)}
+    assert 1 in weekday_assignees
+
+
+def test_pinned_manual_assignment_is_not_duplicated_on_weekly_block():
+    # Riproduce il bug segnalato: MODA e' assegnato a mano (BER) per la
+    # settimana. Rigenerando, il risolutore non deve aggiungere una seconda
+    # persona sullo stesso posto (il fabbisogno e' 1 al giorno).
+    ber = emp(1, "BER", skills=set())
+    altro = emp(2, "TRI", skills=set())
+    moda = ShiftTypeInput(
+        id=1, name="Corsia A", weekly_block=True, weekly_block_strictness=10,
+        days_set={0, 1, 2, 3, 4}, requirements_by_weekday={},
+    )
+
+    result = run(
+        employees=[ber, altro], shift_types=[moda],
+        pinned_assignments={(1, 1, 5)},  # BER (id 1) pinnato sul turno 1 (MODA) il giorno 5 (lunedi')
+    )
+
+    moda_by_day = {}
+    for a in result.assignments:
+        moda_by_day.setdefault(a["day"], set()).add(a["employee_id"])
+
+    # nessun giorno del mese deve mai avere piu' di 1 persona su MODA (il
+    # fabbisogno e' 1): ne' nella settimana pinnata ne' nelle altre.
+    for day, assignees in moda_by_day.items():
+        assert len(assignees) == 1, f"giorno {day}: {assignees} (doveva restarne solo 1)"
+    # la settimana 5-9 (lun-ven) contenente il giorno pinnato resta tutta a BER,
+    # per via del vincolo di blocco settimanale rigido (stessa persona tutti i giorni)
+    pinned_week_days = {dd: moda_by_day[dd] for dd in range(5, 10) if dd in moda_by_day}
+    assert all(assignees == {1} for assignees in pinned_week_days.values())
+
+
+def test_pinned_manual_assignment_on_ordinary_shift_not_duplicated():
+    ber = emp(1, "BER", skills={"X"})
+    altro = emp(2, "TRI", skills={"X"})
+    turno = shift(1, "Turno", skill_required="X", requirements_by_weekday={wd: 1 for wd in range(7)})
+
+    result = run(employees=[ber, altro], shift_types=[turno], pinned_assignments={(1, 1, 5)})
+
+    day5_assignees = {a["employee_id"] for a in result.assignments if a["day"] == 5}
+    assert day5_assignees == {1}
