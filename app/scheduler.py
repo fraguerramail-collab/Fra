@@ -207,6 +207,50 @@ def generate_schedule(
     shift_types_by_id = {st.id: st for st in shift_types}
     warnings = []
 
+    # controllo preventivo: turni inseriti a mano che da soli mettono qualcuno
+    # al lavoro per piu' giorni di fila del limite impostato. Il vincolo
+    # rigido sui giorni consecutivi (piu' sotto) lo impedirebbe comunque, ma
+    # farebbe fallire tutto il calcolo con un generico "nessuna soluzione" e
+    # decine di avvisi scollegati: meglio dirlo subito e chiaramente, senza
+    # nemmeno provare a risolvere (e' matematicamente impossibile).
+    if max_consecutive_work_days and max_consecutive_work_days > 0:
+        pinned_days_by_employee = {}
+        for (st_id, day), emp_ids in pinned_by_shift_day.items():
+            for emp_id in emp_ids:
+                pinned_days_by_employee.setdefault(emp_id, set()).add(day)
+        for emp_id, worked_days in pinned_days_by_employee.items():
+            emp = employees_by_id.get(emp_id)
+            if emp is None or not worked_days:
+                continue
+            sorted_days = sorted(worked_days)
+            run_start = sorted_days[0]
+            prev_day = sorted_days[0]
+            runs = []
+            for day in sorted_days[1:]:
+                if day == prev_day + 1:
+                    prev_day = day
+                    continue
+                runs.append((run_start, prev_day))
+                run_start = day
+                prev_day = day
+            runs.append((run_start, prev_day))
+            for run_start, run_end in runs:
+                run_length = run_end - run_start + 1
+                carried_over = run_start == 1 and bool(prev_month_last_shifts.get(emp_id))
+                if carried_over:
+                    run_length += 1
+                if run_length > max_consecutive_work_days:
+                    extra = " (contando anche l'ultimo giorno lavorato nel mese precedente)" if carried_over else ""
+                    warnings.append(
+                        f"{emp.name}: i turni inseriti a mano lo fanno lavorare {run_length} giorni di fila, "
+                        f"dal giorno {run_start} al giorno {run_end}{extra}, ma il limite impostato e' "
+                        f"{max_consecutive_work_days} giorni consecutivi. Riduci i turni manuali in questo "
+                        f"periodo (deve restare almeno un giorno di pausa ogni {max_consecutive_work_days} "
+                        f"giorni lavorati) prima di generare i turni automaticamente."
+                    )
+        if warnings:
+            return ScheduleResult(assignments=[], warnings=warnings)
+
     def weekday_of(day):
         return (day - 1 + first_weekday) % 7
 

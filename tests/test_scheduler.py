@@ -654,3 +654,26 @@ def test_pinned_assignment_for_employee_no_longer_in_the_list_is_ignored_not_cra
     )
 
     assert isinstance(result.assignments, list)  # non e' esploso
+
+
+def test_pinned_run_longer_than_max_consecutive_days_gives_clear_warning():
+    # Se i turni inseriti a mano da soli mettono qualcuno al lavoro per piu'
+    # giorni di fila del limite impostato, il calcolo e' matematicamente
+    # impossibile: deve dirlo chiaramente e subito (senza girare a vuoto e
+    # restituire un generico "nessuna soluzione" con decine di avvisi
+    # scollegati, come succedeva prima).
+    solo = emp(1, "CAP", skills={"X"})
+    extra = shift(1, "MAS", skill_required="X", is_extra=True)
+
+    result = run(
+        employees=[solo], shift_types=[extra],
+        max_consecutive_work_days=6,
+        pinned_assignments={(1, 1, d) for d in range(7, 14)},  # 7 giorni di fila
+    )
+
+    assert result.assignments == []
+    assert not any("nessuna soluzione" in w for w in result.warnings)
+    assert any(
+        "CAP" in w and "7 giorni di fila" in w and "dal giorno 7 al giorno 13" in w
+        for w in result.warnings
+    )
