@@ -244,7 +244,9 @@ def _build_shift_type_inputs(shift_types):
             time_bands=set(parse_csv(st.time_bands)), skill_required=st.skill_required or "",
             skill_by_weekday={r.weekday: r.skill_override for r in st.requirements if r.skill_override},
             days_set=st.days_set_list(), excluded_categories=st.excluded_category_list(),
-            exclusive_day=st.exclusive_day, requires_rest_next_day=st.requires_rest_next_day,
+            exclusive_day=st.exclusive_day,
+            exclusive_day_exception_shift_type_id=st.exclusive_day_exception_shift_type_id,
+            requires_rest_next_day=st.requires_rest_next_day,
             rest_exception_shift_type_id=st.rest_exception_shift_type_id, min_gap_days=st.min_gap_days,
             min_gap_excludes_weekend=st.min_gap_excludes_weekend,
             weekly_block=st.weekly_block, weekly_block_strictness=st.weekly_block_strictness,
@@ -358,6 +360,8 @@ def _read_shift_type_form(st):
     st.days_set = ",".join(days)
     st.excluded_categories = request.form.get("excluded_categories", "").strip() or None
     st.exclusive_day = request.form.get("exclusive_day") == "on"
+    exclusive_exc = request.form.get("exclusive_day_exception_shift_type_id", type=int)
+    st.exclusive_day_exception_shift_type_id = exclusive_exc or None
     st.requires_rest_next_day = request.form.get("requires_rest_next_day") == "on"
     rest_exc = request.form.get("rest_exception_shift_type_id", type=int)
     st.rest_exception_shift_type_id = rest_exc or None
@@ -444,6 +448,7 @@ def duplicate_shift_type(shift_type_id):
         sort_order=ShiftType.query.count(),
         time_bands=src.time_bands, skill_required=src.skill_required, days_set=src.days_set,
         excluded_categories=src.excluded_categories, exclusive_day=src.exclusive_day,
+        exclusive_day_exception_shift_type_id=src.exclusive_day_exception_shift_type_id,
         requires_rest_next_day=src.requires_rest_next_day,
         rest_exception_shift_type_id=src.rest_exception_shift_type_id, min_gap_days=src.min_gap_days,
         min_gap_excludes_weekend=src.min_gap_excludes_weekend,
@@ -1141,6 +1146,8 @@ def _manual_conflict_pairs(shift_types):
     for i in range(len(sts)):
         for j in range(i + 1, len(sts)):
             a, b = sts[i], sts[j]
+            if a.exclusive_day_exception_shift_type_id == b.id or b.exclusive_day_exception_shift_type_id == a.id:
+                continue
             if a.exclusive_day or b.exclusive_day or (a.time_band_list() & b.time_band_list()):
                 conflicts.add((a.id, b.id) if a.id < b.id else (b.id, a.id))
     return conflicts

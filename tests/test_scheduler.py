@@ -52,6 +52,25 @@ def test_exclusive_day_blocks_second_shift_same_day():
         assert not (1 in ids and 2 in ids)
 
 
+def test_exclusive_day_exception_allows_the_named_shift_together():
+    solo = emp(1, "A", skills={"X"})
+    exclusive = shift(1, "Notte", skill_required="X", exclusive_day=True, exclusive_day_exception_shift_type_id=2)
+    excepted = shift(2, "Reperibilità", skill_required="X")
+    other = shift(3, "Corsia", skill_required="X")
+
+    result = run(employees=[solo], shift_types=[exclusive, excepted, other])
+
+    by_day = {}
+    for a in result.assignments:
+        by_day.setdefault(a["day"], set()).add(a["shift_type_id"])
+    # il turno in eccezione (2) puo' coesistere con l'esclusivo (1)...
+    assert any(1 in ids and 2 in ids for ids in by_day.values())
+    # ...ma un terzo turno non in eccezione resta comunque escluso lo stesso giorno
+    for ids in by_day.values():
+        if 1 in ids:
+            assert 3 not in ids
+
+
 def test_min_gap_days_spacing():
     employees = [emp(1, "A", skills={"X"}), emp(2, "B", skills={"X"})]
     shift_types = [shift(1, "Notte", skill_required="X", min_gap_days=2)]

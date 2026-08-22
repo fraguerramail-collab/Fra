@@ -66,6 +66,7 @@ class ShiftTypeInput:
     days_set: set = field(default_factory=set)
     excluded_categories: set = field(default_factory=set)
     exclusive_day: bool = False
+    exclusive_day_exception_shift_type_id: int | None = None
     requires_rest_next_day: bool = False
     rest_exception_shift_type_id: int | None = None
     min_gap_days: int = 0
@@ -142,14 +143,20 @@ def _bands_compatible(full_block, blocked_bands, shift_bands):
 
 def _shift_type_conflicts(shift_types):
     """Coppie di turni incompatibili lo stesso giorno per la stessa persona:
-    uno dei due e' 'esclusivo', oppure le fasce orarie si sovrappongono."""
+    uno dei due e' 'esclusivo', oppure le fasce orarie si sovrappongono. Un
+    turno esclusivo puo' pero' avere un'eccezione (exclusive_day_exception_shift_type_id):
+    l'altro turno della coppia resta ammesso insieme a lui nonostante l'esclusivita'
+    (es. GN esclusivo in settimana, ma nel weekend il ruolo B copre anche la
+    reperibilita' dello stesso giorno insieme alla notte)."""
     conflicts = set()
     sts = list(shift_types)
     for i in range(len(sts)):
         for j in range(i + 1, len(sts)):
             a, b = sts[i], sts[j]
+            if a.exclusive_day_exception_shift_type_id == b.id or b.exclusive_day_exception_shift_type_id == a.id:
+                continue
             if a.exclusive_day or b.exclusive_day or (a.time_bands & b.time_bands):
-                conflicts.add((a.id, b.id))
+                conflicts.add((a.id, b.id) if a.id < b.id else (b.id, a.id))
     return conflicts
 
 

@@ -71,6 +71,9 @@ class ShiftType(db.Model):
     excluded_categories = db.Column(db.String(120), nullable=True)  # CSV fasce escluse, es. "SP"
 
     exclusive_day = db.Column(db.Boolean, nullable=False, default=False)  # es. GN: nessun altro turno lo stesso giorno
+    exclusive_day_exception_shift_type_id = db.Column(db.Integer, db.ForeignKey("shift_type.id"), nullable=True)
+    # turno ammesso a coesistere lo stesso giorno anche se questo e' 'esclusivo' (es. GN esclusivo in settimana,
+    # ma nel weekend il ruolo B copre anche la reperibilita' dello stesso giorno insieme alla notte)
     requires_rest_next_day = db.Column(db.Boolean, nullable=False, default=False)  # smonto
     rest_exception_shift_type_id = db.Column(db.Integer, db.ForeignKey("shift_type.id"), nullable=True)
     min_gap_days = db.Column(db.Integer, nullable=False, default=0)  # distanza minima tra due occorrenze stesso turno
@@ -91,7 +94,9 @@ class ShiftType(db.Model):
     # stessa colonna in pianificazione/report/CSV (es. "Visite lun"+"Visite gio" -> stessa colonna "VISITE").
     # Restano turni distinti a tutti gli effetti per la generazione automatica: cambia solo la visualizzazione.
 
-    rest_exception_shift_type = db.relationship("ShiftType", remote_side=[id])
+    rest_exception_shift_type = db.relationship(
+        "ShiftType", remote_side=[id], foreign_keys=[rest_exception_shift_type_id]
+    )
     requirements = db.relationship(
         "ShiftRequirement", back_populates="shift_type", cascade="all, delete-orphan"
     )
