@@ -72,8 +72,9 @@ class ShiftType(db.Model):
 
     exclusive_day = db.Column(db.Boolean, nullable=False, default=False)  # es. GN: nessun altro turno lo stesso giorno
     exclusive_day_exception_shift_type_id = db.Column(db.Integer, db.ForeignKey("shift_type.id"), nullable=True)
-    # turno ammesso a coesistere lo stesso giorno anche se questo e' 'esclusivo' (es. GN esclusivo in settimana,
-    # ma nel weekend il ruolo B copre anche la reperibilita' dello stesso giorno insieme alla notte)
+    # turno ammesso a coesistere lo stesso giorno anche se questo e' 'esclusivo', ma SOLO sabato/domenica
+    # (es. GN esclusivo in settimana, ma nel weekend il ruolo B copre anche la reperibilita' dello stesso
+    # giorno insieme alla notte); in settimana l'esclusivita' resta valida anche per il turno in eccezione
     requires_rest_next_day = db.Column(db.Boolean, nullable=False, default=False)  # smonto
     rest_exception_shift_type_id = db.Column(db.Integer, db.ForeignKey("shift_type.id"), nullable=True)
     min_gap_days = db.Column(db.Integer, nullable=False, default=0)  # distanza minima tra due occorrenze stesso turno

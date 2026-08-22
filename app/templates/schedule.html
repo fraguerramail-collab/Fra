@@ -17,6 +17,7 @@
   <button type="submit">Vai</button>
 
   <a class="btn secondary" href="{{ url_for('main.export_schedule_csv', anno=year, mese=month) }}">Esporta CSV</a>
+  <a class="btn secondary" href="{{ url_for('main.export_schedule_xlsx', anno=year, mese=month) }}">Esporta Excel</a>
   {% if edit_mode %}
   <a class="btn secondary" href="{{ url_for('main.schedule', anno=year, mese=month) }}">👁 Vista sola lettura</a>
   {% else %}

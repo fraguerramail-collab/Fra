@@ -4,7 +4,7 @@ import io
 import json
 from datetime import date, timedelta
 
-from flask import Blueprint, flash, redirect, render_template, request, send_file, url_for
+from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, url_for
 
 from .models import (
     AVAILABLE,
@@ -35,6 +35,7 @@ from .scheduler import (
     WeekendRoleInput,
     generate_schedule,
 )
+from .xlsx_export import build_schedule_workbook
 
 bp = Blueprint("main", __name__)
 
@@ -1140,17 +1141,22 @@ def _manual_conflict_pairs(shift_types):
     """Coppie di shift_type_id incompatibili lo stesso giorno per la stessa
     persona (uno esclusivo, o fasce orarie sovrapposte) - stessa logica del
     motore di generazione, ma qui serve solo per avvisare sui conflitti che
-    l'inserimento manuale non impedisce da solo."""
+    l'inserimento manuale non impedisce da solo. Ritorna anche
+    'weekend_exceptions': le coppie ammesse insieme nonostante il conflitto,
+    ma solo sabato/domenica (vedi exclusive_day_exception_shift_type_id)."""
     conflicts = set()
+    weekend_exceptions = set()
     sts = list(shift_types)
     for i in range(len(sts)):
         for j in range(i + 1, len(sts)):
             a, b = sts[i], sts[j]
-            if a.exclusive_day_exception_shift_type_id == b.id or b.exclusive_day_exception_shift_type_id == a.id:
+            if not (a.exclusive_day or b.exclusive_day or (a.time_band_list() & b.time_band_list())):
                 continue
-            if a.exclusive_day or b.exclusive_day or (a.time_band_list() & b.time_band_list()):
-                conflicts.add((a.id, b.id) if a.id < b.id else (b.id, a.id))
-    return conflicts
+            pair = (a.id, b.id) if a.id < b.id else (b.id, a.id)
+            conflicts.add(pair)
+            if a.exclusive_day_exception_shift_type_id == b.id or b.exclusive_day_exception_shift_type_id == a.id:
+                weekend_exceptions.add(pair)
+    return conflicts, weekend_exceptions
 
 
 @bp.route("/pianificazione/salva", methods=["POST"])
@@ -1160,7 +1166,8 @@ def save_schedule():
     num_days = calendar.monthrange(year, month)[1]
 
     types = ShiftType.query.all()
-    conflict_pairs = _manual_conflict_pairs(types)
+    conflict_pairs, weekend_exceptions = _manual_conflict_pairs(types)
+    first_weekday = calendar.monthrange(year, month)[0]
 
     # una cella lasciata identica a prima resta con lo stesso stato (manuale/
     # automatica) che aveva; solo le celle effettivamente cambiate diventano
@@ -1190,10 +1197,11 @@ def save_schedule():
     people_by_id = {e.id: e for e in Employee.query.all()}
     types_by_id = {st.id: st for st in types}
     for (emp_id, day), st_ids in shift_types_by_day.items():
+        is_weekend_day = (first_weekday + day - 1) % 7 in (SATURDAY, SUNDAY)
         for i in range(len(st_ids)):
             for j in range(i + 1, len(st_ids)):
                 pair = (st_ids[i], st_ids[j]) if st_ids[i] < st_ids[j] else (st_ids[j], st_ids[i])
-                if pair in conflict_pairs:
+                if pair in conflict_pairs and not (is_weekend_day and pair in weekend_exceptions):
                     conflicts_found.append((emp_id, day, pair))
 
     flash("Pianificazione salvata.", "success")
@@ -1258,6 +1266,43 @@ def export_schedule_csv():
     mem = io.BytesIO(output.getvalue().encode("utf-8-sig"))
     filename = f"turni_{year}_{month:02d}.csv"
     return send_file(mem, mimetype="text/csv", as_attachment=True, download_name=filename)
+
+
+@bp.route("/pianificazione/esporta.xlsx")
+def export_schedule_xlsx():
+    year, month = _current_year_month()
+    people = Employee.query.filter_by(active=True).order_by(Employee.name).all()
+    people_by_id = {e.id: e for e in people}
+    types = ShiftType.query.order_by(ShiftType.sort_order).all()
+    num_days = calendar.monthrange(year, month)[1]
+
+    assignments = [
+        {"employee_id": a.employee_id, "shift_type_id": a.shift_type_id, "day": a.day}
+        for a in Assignment.query.filter_by(year=year, month=month).all()
+    ]
+
+    absences_by_day = {day: [] for day in range(1, num_days + 1)}
+    for a in Availability.query.filter_by(year=year, month=month).all():
+        if a.status == AVAILABLE or a.employee_id not in people_by_id or a.day not in absences_by_day:
+            continue
+        absences_by_day[a.day].append(people_by_id[a.employee_id].code)
+    absences_text_by_day = {day: ", ".join(sorted(codes)) for day, codes in absences_by_day.items()}
+
+    wb = build_schedule_workbook(
+        profile_name=current_app.config.get("PROFILE_NAME") or "Turni",
+        year=year, month=month, month_name=MONTH_NAMES[month],
+        types=types, employees=people, assignments=assignments,
+        absences_by_day=absences_text_by_day,
+    )
+
+    mem = io.BytesIO()
+    wb.save(mem)
+    mem.seek(0)
+    filename = f"turni_{year}_{month:02d}.xlsx"
+    return send_file(
+        mem, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True, download_name=filename,
+    )
 
 
 # ---------------------------------------------------------------- report

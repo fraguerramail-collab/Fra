@@ -143,21 +143,27 @@ def _bands_compatible(full_block, blocked_bands, shift_bands):
 
 def _shift_type_conflicts(shift_types):
     """Coppie di turni incompatibili lo stesso giorno per la stessa persona:
-    uno dei due e' 'esclusivo', oppure le fasce orarie si sovrappongono. Un
-    turno esclusivo puo' pero' avere un'eccezione (exclusive_day_exception_shift_type_id):
-    l'altro turno della coppia resta ammesso insieme a lui nonostante l'esclusivita'
-    (es. GN esclusivo in settimana, ma nel weekend il ruolo B copre anche la
-    reperibilita' dello stesso giorno insieme alla notte)."""
+    uno dei due e' 'esclusivo', oppure le fasce orarie si sovrappongono.
+
+    Ritorna anche 'weekend_exceptions': le coppie in cui uno dei due turni
+    ammette esplicitamente l'altro (exclusive_day_exception_shift_type_id)
+    nonostante l'esclusivita'. L'eccezione vale SOLO sabato/domenica (es. GN
+    esclusivo in settimana, ma nel weekend il ruolo B copre anche la
+    reperibilita' dello stesso giorno insieme alla notte): in settimana il
+    conflitto resta comunque valido."""
     conflicts = set()
+    weekend_exceptions = set()
     sts = list(shift_types)
     for i in range(len(sts)):
         for j in range(i + 1, len(sts)):
             a, b = sts[i], sts[j]
-            if a.exclusive_day_exception_shift_type_id == b.id or b.exclusive_day_exception_shift_type_id == a.id:
+            if not (a.exclusive_day or b.exclusive_day or (a.time_bands & b.time_bands)):
                 continue
-            if a.exclusive_day or b.exclusive_day or (a.time_bands & b.time_bands):
-                conflicts.add((a.id, b.id) if a.id < b.id else (b.id, a.id))
-    return conflicts
+            pair = (a.id, b.id) if a.id < b.id else (b.id, a.id)
+            conflicts.add(pair)
+            if a.exclusive_day_exception_shift_type_id == b.id or b.exclusive_day_exception_shift_type_id == a.id:
+                weekend_exceptions.add(pair)
+    return conflicts, weekend_exceptions
 
 
 def _prev_month_last_weekday(year, month):
@@ -566,14 +572,15 @@ def generate_schedule(
     for (emp_id, st_id, day), var in x.items():
         by_day.setdefault((emp_id, day), []).append((st_id, var))
 
-    conflicts = _shift_type_conflicts(shift_types)
+    conflicts, weekend_exceptions = _shift_type_conflicts(shift_types)
     for (emp_id, day), items in by_day.items():
+        is_weekend_day = weekday_of(day) in (SATURDAY, SUNDAY)
         for i in range(len(items)):
             st1_id, v1 = items[i]
             for j in range(i + 1, len(items)):
                 st2_id, v2 = items[j]
                 pair = (st1_id, st2_id) if st1_id < st2_id else (st2_id, st1_id)
-                if pair in conflicts:
+                if pair in conflicts and not (is_weekend_day and pair in weekend_exceptions):
                     model.Add(v1 + v2 <= 1)
 
     # smonto: turno che richiede riposo il giorno dopo, con eccezione sab->dom

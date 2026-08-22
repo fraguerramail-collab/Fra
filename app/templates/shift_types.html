@@ -80,9 +80,9 @@
 
         <div class="toolbar">
           <label><input type="checkbox" name="exclusive_day" {% if st.exclusive_day %}checked{% endif %}> Turno esclusivo (nessun altro turno lo stesso giorno)</label>
-          <label>Eccezione turno esclusivo (ammesso insieme)
+          <label>Eccezione turno esclusivo (ammesso insieme, solo sab/dom)
             <select name="exclusive_day_exception_shift_type_id"
-                    title="Turno che puo' coesistere con questo lo stesso giorno anche se e' esclusivo (es. GN esclusivo in settimana, ma nel weekend il ruolo B copre anche la reperibilità dello stesso giorno insieme alla notte).">
+                    title="Turno che puo' coesistere con questo SOLO sabato o domenica, anche se e' esclusivo (es. GN esclusivo in settimana, ma nel weekend il ruolo B copre anche la reperibilità dello stesso giorno insieme alla notte). In settimana l'esclusivita' resta valida anche per questo turno.">
               <option value="">-- nessuna --</option>
               {% for other in shift_types %}
               <option value="{{ other.id }}" {% if st.exclusive_day_exception_shift_type_id == other.id %}selected{% endif %}>{{ other.name }}</option>

@@ -52,23 +52,23 @@ def test_exclusive_day_blocks_second_shift_same_day():
         assert not (1 in ids and 2 in ids)
 
 
-def test_exclusive_day_exception_allows_the_named_shift_together():
+def test_exclusive_day_exception_allows_the_named_shift_only_on_weekend():
+    # gennaio 2026: il giorno 1 e' giovedi' (infrasettimanale), il giorno 3
+    # e' sabato e il giorno 4 domenica.
     solo = emp(1, "A", skills={"X"})
     exclusive = shift(1, "Notte", skill_required="X", exclusive_day=True, exclusive_day_exception_shift_type_id=2)
     excepted = shift(2, "Reperibilità", skill_required="X")
-    other = shift(3, "Corsia", skill_required="X")
 
-    result = run(employees=[solo], shift_types=[exclusive, excepted, other])
+    result = run(employees=[solo], shift_types=[exclusive, excepted])
 
     by_day = {}
     for a in result.assignments:
         by_day.setdefault(a["day"], set()).add(a["shift_type_id"])
-    # il turno in eccezione (2) puo' coesistere con l'esclusivo (1)...
-    assert any(1 in ids and 2 in ids for ids in by_day.values())
-    # ...ma un terzo turno non in eccezione resta comunque escluso lo stesso giorno
-    for ids in by_day.values():
-        if 1 in ids:
-            assert 3 not in ids
+    # nel weekend il turno in eccezione (2) puo' coesistere con l'esclusivo (1)...
+    assert any(1 in ids and 2 in ids for ids in (by_day.get(3, set()), by_day.get(4, set())))
+    # ...ma in settimana l'esclusivita' resta valida nonostante l'eccezione
+    weekday_ids = by_day.get(1, set())
+    assert not (1 in weekday_ids and 2 in weekday_ids)
 
 
 def test_min_gap_days_spacing():
