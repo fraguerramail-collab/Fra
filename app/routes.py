@@ -1294,6 +1294,41 @@ def report():
     )
 
 
+@bp.route("/assenze")
+def absences():
+    year, month = _current_year_month()
+    people = Employee.query.filter_by(active=True).order_by(Employee.name).all()
+    people_by_id = {e.id: e for e in people}
+    num_days = calendar.monthrange(year, month)[1]
+    first_weekday = calendar.monthrange(year, month)[0]
+
+    label_by_status = {value: label for value, label in AVAILABILITY_OPTIONS}
+
+    absences_by_day = {day: [] for day in range(1, num_days + 1)}
+    for a in Availability.query.filter_by(year=year, month=month).all():
+        if a.status == AVAILABLE or a.employee_id not in people_by_id or a.day not in absences_by_day:
+            continue
+        absences_by_day[a.day].append(
+            (people_by_id[a.employee_id].name, label_by_status.get(a.status, a.status))
+        )
+    for day in absences_by_day:
+        absences_by_day[day].sort()
+
+    days = [
+        {
+            "day": day,
+            "weekday_name": WEEKDAY_NAMES[(first_weekday + day - 1) % 7],
+            "absences": absences_by_day[day],
+        }
+        for day in range(1, num_days + 1)
+    ]
+
+    return render_template(
+        "absences.html", days=days, year=year, month=month,
+        month_name=MONTH_NAMES[month], month_names=MONTH_NAMES,
+    )
+
+
 @bp.route("/guida")
 def guide():
     return render_template("guide.html")

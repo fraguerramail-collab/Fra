@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Assenze - Gestione Turni{% endblock %}
+{% block content %}
+<h1>Assenze — {{ month_name }} {{ year }}</h1>
+
+<form method="get" action="{{ url_for('main.absences') }}" class="toolbar">
+  <label>Mese
+    <select name="mese">
+      {% for i in range(1, 13) %}
+      <option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ month_names[i] }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Anno <input type="number" name="anno" value="{{ year }}" style="width:6rem"></label>
+  <button type="submit">Vai</button>
+</form>
+
+<p><small>Elenco di chi risulta in ferie/malattia/non disponibile per ogni giorno del mese, cosi' come inserito nella pagina "Disponibilità". Seleziona e copia la tabella per incollarla nel report mensile.</small></p>
+
+<div class="card table-scroll">
+  <table class="table-compact">
+    <thead>
+      <tr>
+        <th>Giorno</th>
+        <th>Assenti / non disponibili</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in days %}
+      <tr>
+        <td class="day-cell">{{ d.day }} {{ d.weekday_name[:3] }}</td>
+        <td>
+          {% if d.absences %}
+            {{ d.absences | map('join', ' - ') | join(', ') }}
+          {% else %}
+            <small style="color:var(--muted)">—</small>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
