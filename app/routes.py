@@ -244,7 +244,7 @@ def _build_shift_type_inputs(shift_types):
             id=st.id, name=st.name,
             time_bands=set(parse_csv(st.time_bands)), skill_required=st.skill_required or "",
             skill_by_weekday={r.weekday: r.skill_override for r in st.requirements if r.skill_override},
-            days_set=st.days_set_list(), excluded_categories=st.excluded_category_list(),
+            days_set=st.days_set_list(), excluded_categories=st.excluded_category_list(), group=st.group,
             exclusive_day=st.exclusive_day,
             exclusive_day_exception_shift_type_id=st.exclusive_day_exception_shift_type_id,
             requires_rest_next_day=st.requires_rest_next_day,

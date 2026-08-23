@@ -42,9 +42,12 @@ SATURDAY, SUNDAY = 5, 6
 SHORTFALL_PENALTY = 1_000_000
 WEEKEND_FAIRNESS_WEIGHT = 200
 FAIRNESS_WEIGHT = 400
+GROUP_FAIRNESS_WEIGHT = 600  # equilibrio per categoria di turno (notte, ambulatorio...), oltre al totale
+POOL_FAIRNESS_WEIGHT = 500  # equilibrio dentro ogni 'pool equita' separato (es. turni extra a pagamento)
 MAX_MESE_PENALTY = 5_000
 BLOCK_DEVIATION_UNIT_WEIGHT = 300
-SOLVER_TIME_LIMIT_SECONDS = 90
+SPREAD_PENALTY_WEIGHT = 50  # spinta morbida a distanziare oltre il minimo, per non ammassare piu' occorrenze vicine
+SOLVER_TIME_LIMIT_SECONDS = 150  # l'equita' per categoria/pool e la spinta a spalmare rendono il calcolo piu' lento
 
 
 @dataclass
@@ -66,6 +69,8 @@ class ShiftTypeInput:
     skill_by_weekday: dict = field(default_factory=dict)  # weekday -> skill_required specifica (sovrascrive quella generale)
     days_set: set = field(default_factory=set)
     excluded_categories: set = field(default_factory=set)
+    group: str | None = None  # categoria di visualizzazione (NOTTE, GUARDIA, AMBULATORIO...), usata anche
+    # per l'equita' per categoria: cosi' nessuno resta a zero notti/ambulatori pur avendo un totale nella norma
     exclusive_day: bool = False
     exclusive_day_exception_shift_type_id: int | None = None
     requires_rest_next_day: bool = False
@@ -618,17 +623,23 @@ def generate_schedule(
                 if v2 is not None:
                     model.Add(v2 == 0)
 
-    # distanza minima in giorni tra due occorrenze dello stesso turno
+    # distanza minima in giorni tra due occorrenze dello stesso turno, piu' una
+    # spinta 'morbida' (non vietante) a restare oltre il doppio di quella
+    # distanza quando possibile: senza questo, tre notti nella stessa
+    # settimana sono "legali" (rispettano il minimo) ma restano ammassate
+    # invece di spalmarsi nel mese.
     for shift_type in shift_types:
         if shift_type.min_gap_days <= 0:
             continue
+        soft_target = shift_type.min_gap_days * 2
         days_with_var = sorted({day for (eid, sid, day) in x if sid == shift_type.id})
         for emp in employees:
             emp_days = [dd for dd in days_with_var if get_x(emp.id, shift_type.id, dd) is not None]
             for i in range(len(emp_days)):
                 for j in range(i + 1, len(emp_days)):
                     d1, d2 = emp_days[i], emp_days[j]
-                    if d2 - d1 > shift_type.min_gap_days:
+                    gap = d2 - d1
+                    if gap >= soft_target:
                         break
                     if (
                         shift_type.min_gap_excludes_weekend
@@ -638,7 +649,12 @@ def generate_schedule(
                         continue
                     v1 = get_x(emp.id, shift_type.id, d1)
                     v2 = get_x(emp.id, shift_type.id, d2)
-                    model.Add(v1 + v2 <= 1)
+                    if gap <= shift_type.min_gap_days:
+                        model.Add(v1 + v2 <= 1)
+                        continue
+                    both = model.NewBoolVar(f"close_e{emp.id}_s{shift_type.id}_d{d1}_{d2}")
+                    model.Add(both >= v1 + v2 - 1)
+                    objective_terms.append(SPREAD_PENALTY_WEIGHT * (soft_target - gap) * both)
 
             # stessa distanza minima anche rispetto all'ultima occorrenza nel
             # mese precedente (altrimenti il vincolo "dimentica" tutto al
@@ -730,6 +746,54 @@ def generate_schedule(
         model.AddMaxEquality(max_weekend, weekend_total_vars)
         model.AddMinEquality(min_weekend, weekend_total_vars)
         objective_terms.append(WEEKEND_FAIRNESS_WEIGHT * (max_weekend - min_weekend))
+
+    # equita' per categoria (group) e per pool: l'equita' sul totale sopra non
+    # basta a impedire che qualcuno resti a zero notti o zero ambulatori pur
+    # avendo un totale nella norma (compensato da altri turni, es. quelli
+    # extra). Qui si bilancia separatamente ogni categoria di turno ordinario
+    # (NOTTE, GUARDIA, AMBULATORIO...) e ogni pool di equita' separato (es.
+    # turni extra a pagamento), solo tra le persone che potrebbero davvero
+    # farne parte (skill/categoria compatibili), altrimenti il confronto non
+    # avrebbe senso.
+    def could_ever_qualify(emp, st):
+        if not _has_skill(emp, st.skill_required):
+            return False
+        if emp.category in st.excluded_categories:
+            return False
+        return True
+
+    group_shift_ids = {}
+    for st in shift_types:
+        if st.weekly_block or st.is_extra or not st.group:
+            continue
+        group_shift_ids.setdefault(st.group, []).append(st.id)
+
+    pool_shift_ids = {}
+    for st in shift_types:
+        if not st.balance_pool:
+            continue
+        pool_shift_ids.setdefault(st.balance_pool, []).append(st.id)
+
+    for kind, weight, buckets in (
+        ("group", GROUP_FAIRNESS_WEIGHT, group_shift_ids),
+        ("pool", POOL_FAIRNESS_WEIGHT, pool_shift_ids),
+    ):
+        for bucket_key, st_ids in buckets.items():
+            bucket_types = [shift_types_by_id[sid] for sid in st_ids]
+            totals = []
+            for emp in employees:
+                if not any(could_ever_qualify(emp, st) for st in bucket_types):
+                    continue
+                emp_vars = [v for (eid, sid, dd), v in x.items() if eid == emp.id and sid in st_ids]
+                totals.append(sum(emp_vars) if emp_vars else 0)
+            if len(totals) < 2:
+                continue
+            upper = num_days * len(st_ids) + 1
+            bucket_max = model.NewIntVar(0, upper, f"max_{kind}_{bucket_key}")
+            bucket_min = model.NewIntVar(0, upper, f"min_{kind}_{bucket_key}")
+            model.AddMaxEquality(bucket_max, totals)
+            model.AddMinEquality(bucket_min, totals)
+            objective_terms.append(weight * (bucket_max - bucket_min))
 
     # preferenze pesate: EVITA/PREFERISCI/RISERVA agiscono come costo diretto
     # sull'assegnazione; MAX_MESE penalizza il superamento di una soglia

@@ -56,6 +56,67 @@ def test_night_shift_exempt_employee_never_assigned_to_night_band():
     assert 1 in day_assignees
 
 
+def test_group_fairness_spreads_category_not_just_total():
+    # senza equita' per categoria, il totale potrebbe restare uguale tra i
+    # due (es. 15 e 15 su un mese) pur concentrando tutta la notte su uno
+    # solo e tutto il turno ordinario sull'altro: qui verifichiamo che
+    # entrambi facciano almeno qualche turno di entrambe le categorie.
+    a = emp(1, "A", skills={"X"})
+    b = emp(2, "B", skills={"X"})
+    notte = shift(1, "Notte", skill_required="X", group="NOTTE", time_bands={"NOTTE"})
+    giorno = shift(2, "Giorno", skill_required="X", group="GIORNO", time_bands={"MATTINA"})
+
+    result = run(employees=[a, b], shift_types=[notte, giorno])
+
+    notte_by_emp = {1: 0, 2: 0}
+    giorno_by_emp = {1: 0, 2: 0}
+    for asg in result.assignments:
+        if asg["shift_type_id"] == 1:
+            notte_by_emp[asg["employee_id"]] += 1
+        elif asg["shift_type_id"] == 2:
+            giorno_by_emp[asg["employee_id"]] += 1
+
+    assert notte_by_emp[1] > 0 and notte_by_emp[2] > 0
+    assert giorno_by_emp[1] > 0 and giorno_by_emp[2] > 0
+
+
+def test_pool_fairness_spreads_extra_shifts_between_eligible_people():
+    a = emp(1, "A", skills={"X"})
+    b = emp(2, "B", skills={"X"})
+    extra1 = shift(1, "Extra1", skill_required="X", is_extra=True, balance_pool="ECONOMICO")
+    extra2 = shift(2, "Extra2", skill_required="X", is_extra=True, balance_pool="ECONOMICO")
+
+    result = run(
+        employees=[a, b], shift_types=[extra1, extra2],
+        extra_activations={d: [1, 2] for d in range(1, 32)},
+    )
+
+    count_by_emp = {1: 0, 2: 0}
+    for asg in result.assignments:
+        count_by_emp[asg["employee_id"]] += 1
+    assert count_by_emp[1] > 0 and count_by_emp[2] > 0
+
+
+def test_spread_penalty_prefers_wider_gap_when_equally_good_otherwise():
+    # turno richiesto solo nei giorni 1, 4 e 5 (tutto il resto soppresso):
+    # 4 e 5 sono troppo vicini (distanza 1) per andare alla stessa persona
+    # (vietato dal minimo di 2), quindi qualcuno fa 2 turni scegliendo tra
+    # abbinare 1+4 (distanza 3, penalizzata perche' sotto il doppio del
+    # minimo) oppure 1+5 (distanza 4, non penalizzata): l'equita' sul totale
+    # e' identica in entrambi i casi, quindi solo la spinta a spalmare fa la
+    # differenza.
+    a = emp(1, "A", skills={"X"})
+    b = emp(2, "B", skills={"X"})
+    notte = shift(1, "Notte", skill_required="X", min_gap_days=2)
+    suppressions = {(1, d) for d in range(1, 29) if d not in (1, 4, 5)}
+
+    result = run(employees=[a, b], shift_types=[notte], month=2, suppressions=suppressions)
+
+    assigned_by_day = {a_row["day"]: a_row["employee_id"] for a_row in result.assignments}
+    assert assigned_by_day.get(4) != assigned_by_day.get(1)
+    assert assigned_by_day.get(1) == assigned_by_day.get(5)
+
+
 def test_exclusive_day_blocks_second_shift_same_day():
     employees = [emp(1, "A", skills={"X"})]
     exclusive = shift(1, "Notte", skill_required="X", exclusive_day=True)
