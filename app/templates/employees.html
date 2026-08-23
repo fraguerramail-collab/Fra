@@ -50,6 +50,7 @@
       <span class="pill" style="background: var(--primary)">{{ emp.code }}</span>
       <strong>{{ emp.name }}</strong>
       {% if not emp.active %}<span class="chip">disattivato</span>{% endif %}
+      {% if emp.night_shift_exempt %}<span class="chip" title="Esclusa/o da Guardia Notte e reperibilità notte">esonero notte</span>{% endif %}
       <div class="chip-list">
         {% set all_skills = emp.skill_list()|sort %}
         {% for sk in all_skills[:4] %}<span class="chip">{{ sk }}</span>{% else %}<span class="empty-cell">nessuna skill</span>{% endfor %}
@@ -63,6 +64,8 @@
         <label>Fascia/categoria<br><input type="text" name="category" value="{{ emp.category or '' }}" style="width:100%"></label>
         <label>Skill<br>{{ skill_picker(emp.skill_list(), known_skills) }}</label>
         <label><input type="checkbox" name="active" {% if emp.active %}checked{% endif %}> Attivo</label>
+        <label><input type="checkbox" name="night_shift_exempt" {% if emp.night_shift_exempt %}checked{% endif %}>
+          Esonero impegno notturno (es. post-maternità: esclude da Guardia Notte e reperibilità notte)</label>
         <label>Max turni/settimana<br><input type="number" name="max_shifts_per_week" min="1" value="{{ emp.max_shifts_per_week or '' }}" style="width:100%"></label>
         <label>Note<br><input type="text" name="notes" value="{{ emp.notes or '' }}" style="width:100%"></label>
         <div class="save-bar">

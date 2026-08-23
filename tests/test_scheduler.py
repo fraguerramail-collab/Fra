@@ -10,8 +10,11 @@ from app.scheduler import (
 )
 
 
-def emp(id_, name, category="", skills=None):
-    return EmployeeInput(id=id_, name=name, category=category, skills=skills or set())
+def emp(id_, name, category="", skills=None, night_shift_exempt=False):
+    return EmployeeInput(
+        id=id_, name=name, category=category, skills=skills or set(),
+        night_shift_exempt=night_shift_exempt,
+    )
 
 
 def shift(id_, name, **kwargs):
@@ -36,6 +39,21 @@ def test_skill_matching_excludes_unqualified():
 
     used = {a["employee_id"] for a in result.assignments}
     assert used == {2}
+
+
+def test_night_shift_exempt_employee_never_assigned_to_night_band():
+    exempt = emp(1, "A", skills={"X"}, night_shift_exempt=True)
+    other = emp(2, "B", skills={"X"})
+    night = shift(1, "Notte", skill_required="X", time_bands={"NOTTE"})
+    day_shift = shift(2, "Giorno", skill_required="X", time_bands={"MATTINA"})
+
+    result = run(employees=[exempt, other], shift_types=[night, day_shift])
+
+    night_assignees = {a["employee_id"] for a in result.assignments if a["shift_type_id"] == 1}
+    assert 1 not in night_assignees
+    # ma resta idonea per i turni diurni
+    day_assignees = {a["employee_id"] for a in result.assignments if a["shift_type_id"] == 2}
+    assert 1 in day_assignees
 
 
 def test_exclusive_day_blocks_second_shift_same_day():

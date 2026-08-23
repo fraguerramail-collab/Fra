@@ -36,6 +36,8 @@ class Employee(db.Model):
     active = db.Column(db.Boolean, nullable=False, default=True)
     max_shifts_per_week = db.Column(db.Integer, nullable=True)
     notes = db.Column(db.String(255), nullable=True)
+    night_shift_exempt = db.Column(db.Boolean, nullable=False, default=False)  # es. post-maternita': esclude
+    # dai turni con fascia NOTTE (GN, reperibilita' notte...), attivabile/disattivabile quando serve
 
     availabilities = db.relationship(
         "Availability", back_populates="employee", cascade="all, delete-orphan"

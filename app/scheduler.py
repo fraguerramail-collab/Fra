@@ -54,6 +54,7 @@ class EmployeeInput:
     category: str = ""
     skills: set = field(default_factory=set)
     max_shifts_per_week: int | None = None
+    night_shift_exempt: bool = False
 
 
 @dataclass
@@ -281,6 +282,8 @@ def generate_schedule(
         if not _has_skill(emp, skill_formula if skill_formula is not None else shift_type.skill_required):
             return False
         if emp.category in shift_type.excluded_categories:
+            return False
+        if emp.night_shift_exempt and "NOTTE" in shift_type.time_bands:
             return False
         if not is_available(emp.id, day, shift_type):
             return False

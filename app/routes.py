@@ -232,7 +232,7 @@ def _build_employee_inputs(employees):
     return [
         EmployeeInput(
             id=e.id, name=e.name, category=e.category or "", skills=e.skill_list(),
-            max_shifts_per_week=e.max_shifts_per_week,
+            max_shifts_per_week=e.max_shifts_per_week, night_shift_exempt=e.night_shift_exempt,
         )
         for e in employees
     ]
@@ -334,6 +334,7 @@ def edit_employee(employee_id):
     emp.category = request.form.get("category", "").strip() or None
     emp.skills = request.form.get("skills", "").strip() or None
     emp.active = request.form.get("active") == "on"
+    emp.night_shift_exempt = request.form.get("night_shift_exempt") == "on"
     emp.max_shifts_per_week = request.form.get("max_shifts_per_week", type=int)
     emp.notes = request.form.get("notes", "").strip() or None
     db.session.commit()
