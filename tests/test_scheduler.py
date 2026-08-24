@@ -56,15 +56,16 @@ def test_night_shift_exempt_employee_never_assigned_to_night_band():
     assert 1 in day_assignees
 
 
-def test_group_fairness_spreads_category_not_just_total():
-    # senza equita' per categoria, il totale potrebbe restare uguale tra i
-    # due (es. 15 e 15 su un mese) pur concentrando tutta la notte su uno
-    # solo e tutto il turno ordinario sull'altro: qui verifichiamo che
-    # entrambi facciano almeno qualche turno di entrambe le categorie.
+def test_pool_fairness_spreads_category_not_just_total():
+    # senza equita' per pool, il totale potrebbe restare uguale tra i due
+    # (es. 15 e 15 su un mese) pur concentrando tutta la notte su uno solo e
+    # tutto il turno ordinario sull'altro: qui verifichiamo che entrambi
+    # facciano almeno qualche turno di entrambe le categorie (ciascuna nel
+    # proprio pool di equita').
     a = emp(1, "A", skills={"X"})
     b = emp(2, "B", skills={"X"})
-    notte = shift(1, "Notte", skill_required="X", group="NOTTE", time_bands={"NOTTE"})
-    giorno = shift(2, "Giorno", skill_required="X", group="GIORNO", time_bands={"MATTINA"})
+    notte = shift(1, "Notte", skill_required="X", balance_pool="NOTTE", time_bands={"NOTTE"})
+    giorno = shift(2, "Giorno", skill_required="X", balance_pool="GIORNO", time_bands={"MATTINA"})
 
     result = run(employees=[a, b], shift_types=[notte, giorno])
 
@@ -95,6 +96,28 @@ def test_pool_fairness_spreads_extra_shifts_between_eligible_people():
     for asg in result.assignments:
         count_by_emp[asg["employee_id"]] += 1
     assert count_by_emp[1] > 0 and count_by_emp[2] > 0
+
+
+def test_specializzando_excluded_from_pool_fairness():
+    # con solo uno specializzando e una persona normale idonei per un pool,
+    # lo specializzando va escluso dall'equita' di quel pool (resta solo un
+    # candidato "vero", quindi il vincolo di equita' del pool non si applica
+    # affatto): una forte preferenza verso lo specializzando deve poter
+    # sbilanciare parecchio l'assegnazione, invece di essere respinta
+    # dall'equita' del pool come accadrebbe se non fosse escluso.
+    sp = emp(1, "SP", category="Specializzando", skills={"X"})
+    n = emp(2, "N", skills={"X"})
+    p = shift(1, "P", skill_required="X", balance_pool="POOL1")
+    pref = PreferenceInput(
+        employee_id=1, shift_type_id=1, days_set=set(), pref_type="PREFERISCI", weight=1000, time_bands=set()
+    )
+
+    result = run(employees=[sp, n], shift_types=[p], preferences=[pref])
+
+    count_by_emp = {1: 0, 2: 0}
+    for asg in result.assignments:
+        count_by_emp[asg["employee_id"]] += 1
+    assert count_by_emp[1] > count_by_emp[2] * 2
 
 
 def test_spread_penalty_prefers_wider_gap_when_equally_good_otherwise():

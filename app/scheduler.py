@@ -42,8 +42,7 @@ SATURDAY, SUNDAY = 5, 6
 SHORTFALL_PENALTY = 1_000_000
 WEEKEND_FAIRNESS_WEIGHT = 200
 FAIRNESS_WEIGHT = 400
-GROUP_FAIRNESS_WEIGHT = 600  # equilibrio per categoria di turno (notte, ambulatorio...), oltre al totale
-POOL_FAIRNESS_WEIGHT = 500  # equilibrio dentro ogni 'pool equita' separato (es. turni extra a pagamento)
+POOL_FAIRNESS_WEIGHT = 600  # equilibrio dentro ogni 'pool equita' separato (es. ambulatori, guardie, reperibilita')
 MAX_MESE_PENALTY = 5_000
 BLOCK_DEVIATION_UNIT_WEIGHT = 300
 SPREAD_PENALTY_WEIGHT = 50  # spinta morbida a distanziare oltre il minimo, per non ammassare piu' occorrenze vicine
@@ -69,8 +68,6 @@ class ShiftTypeInput:
     skill_by_weekday: dict = field(default_factory=dict)  # weekday -> skill_required specifica (sovrascrive quella generale)
     days_set: set = field(default_factory=set)
     excluded_categories: set = field(default_factory=set)
-    group: str | None = None  # categoria di visualizzazione (NOTTE, GUARDIA, AMBULATORIO...), usata anche
-    # per l'equita' per categoria: cosi' nessuno resta a zero notti/ambulatori pur avendo un totale nella norma
     exclusive_day: bool = False
     exclusive_day_exception_shift_type_id: int | None = None
     requires_rest_next_day: bool = False
@@ -747,26 +744,25 @@ def generate_schedule(
         model.AddMinEquality(min_weekend, weekend_total_vars)
         objective_terms.append(WEEKEND_FAIRNESS_WEIGHT * (max_weekend - min_weekend))
 
-    # equita' per categoria (group) e per pool: l'equita' sul totale sopra non
-    # basta a impedire che qualcuno resti a zero notti o zero ambulatori pur
-    # avendo un totale nella norma (compensato da altri turni, es. quelli
-    # extra). Qui si bilancia separatamente ogni categoria di turno ordinario
-    # (NOTTE, GUARDIA, AMBULATORIO...) e ogni pool di equita' separato (es.
-    # turni extra a pagamento), solo tra le persone che potrebbero davvero
-    # farne parte (skill/categoria compatibili), altrimenti il confronto non
-    # avrebbe senso.
+    # equita' per pool: l'equita' sul totale sopra non basta a impedire che
+    # qualcuno resti a zero notti o zero ambulatori pur avendo un totale
+    # nella norma (compensato da altri turni). Qui si bilancia separatamente
+    # ogni "pool equita' separato" (campo 'balance_pool' sul turno) tra le
+    # persone che potrebbero davvero farne parte (skill/categoria
+    # compatibili), cosi' il reparto puo' definire a mano quali turni vanno
+    # spalmati insieme (es. tutti gli ambulatori in un pool, guardia giorno
+    # in un altro, reperibilita' giorno+notte in un altro ancora) lasciando
+    # fuori quello che non deve entrare nell'equita' (es. Breast, turni a
+    # blocco settimanale) semplicemente non impostando il pool su quei turni.
+    # Chi ha categoria 'Specializzando' resta sempre fuori da ogni pool.
     def could_ever_qualify(emp, st):
+        if emp.category == "Specializzando":
+            return False
         if not _has_skill(emp, st.skill_required):
             return False
         if emp.category in st.excluded_categories:
             return False
         return True
-
-    group_shift_ids = {}
-    for st in shift_types:
-        if st.weekly_block or st.is_extra or not st.group:
-            continue
-        group_shift_ids.setdefault(st.group, []).append(st.id)
 
     pool_shift_ids = {}
     for st in shift_types:
@@ -774,26 +770,22 @@ def generate_schedule(
             continue
         pool_shift_ids.setdefault(st.balance_pool, []).append(st.id)
 
-    for kind, weight, buckets in (
-        ("group", GROUP_FAIRNESS_WEIGHT, group_shift_ids),
-        ("pool", POOL_FAIRNESS_WEIGHT, pool_shift_ids),
-    ):
-        for bucket_key, st_ids in buckets.items():
-            bucket_types = [shift_types_by_id[sid] for sid in st_ids]
-            totals = []
-            for emp in employees:
-                if not any(could_ever_qualify(emp, st) for st in bucket_types):
-                    continue
-                emp_vars = [v for (eid, sid, dd), v in x.items() if eid == emp.id and sid in st_ids]
-                totals.append(sum(emp_vars) if emp_vars else 0)
-            if len(totals) < 2:
+    for bucket_key, st_ids in pool_shift_ids.items():
+        bucket_types = [shift_types_by_id[sid] for sid in st_ids]
+        totals = []
+        for emp in employees:
+            if not any(could_ever_qualify(emp, st) for st in bucket_types):
                 continue
-            upper = num_days * len(st_ids) + 1
-            bucket_max = model.NewIntVar(0, upper, f"max_{kind}_{bucket_key}")
-            bucket_min = model.NewIntVar(0, upper, f"min_{kind}_{bucket_key}")
-            model.AddMaxEquality(bucket_max, totals)
-            model.AddMinEquality(bucket_min, totals)
-            objective_terms.append(weight * (bucket_max - bucket_min))
+            emp_vars = [v for (eid, sid, dd), v in x.items() if eid == emp.id and sid in st_ids]
+            totals.append(sum(emp_vars) if emp_vars else 0)
+        if len(totals) < 2:
+            continue
+        upper = num_days * len(st_ids) + 1
+        bucket_max = model.NewIntVar(0, upper, f"max_pool_{bucket_key}")
+        bucket_min = model.NewIntVar(0, upper, f"min_pool_{bucket_key}")
+        model.AddMaxEquality(bucket_max, totals)
+        model.AddMinEquality(bucket_min, totals)
+        objective_terms.append(POOL_FAIRNESS_WEIGHT * (bucket_max - bucket_min))
 
     # preferenze pesate: EVITA/PREFERISCI/RISERVA agiscono come costo diretto
     # sull'assegnazione; MAX_MESE penalizza il superamento di una soglia
@@ -840,6 +832,12 @@ def generate_schedule(
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = SOLVER_TIME_LIMIT_SECONDS
     solver.parameters.num_search_workers = 8
+    # con molte persone/turni intercambiabili (equita' per pool inclusa) ci
+    # sono spesso tante soluzioni diverse ma ugualmente valide: pretendere la
+    # prova di ottimalita' esatta puo' far girare il risolutore per tutto il
+    # tempo a disposizione anche quando una soluzione gia' ottima (o vicinissima)
+    # e' stata trovata da subito. L'1% di margine evita questa attesa inutile.
+    solver.parameters.relative_gap_limit = 0.01
     status = solver.Solve(model)
 
     assignments = []
