@@ -12,6 +12,7 @@ from .models import (
     Availability,
     Employee,
     ExtraShiftActivation,
+    LockedMonth,
     PREFERENCE_TYPES,
     Preference,
     SATURDAY,
@@ -244,7 +245,7 @@ def _build_shift_type_inputs(shift_types):
             id=st.id, name=st.name,
             time_bands=set(parse_csv(st.time_bands)), skill_required=st.skill_required or "",
             skill_by_weekday={r.weekday: r.skill_override for r in st.requirements if r.skill_override},
-            days_set=st.days_set_list(), excluded_categories=st.excluded_category_list(), group=st.group,
+            days_set=st.days_set_list(), excluded_categories=st.excluded_category_list(),
             exclusive_day=st.exclusive_day,
             exclusive_day_exception_shift_type_id=st.exclusive_day_exception_shift_type_id,
             requires_rest_next_day=st.requires_rest_next_day,
@@ -948,7 +949,7 @@ def schedule():
     return render_template(
         "schedule.html", employees=people, shift_types=types, columns=columns,
         active_members_by_column_day=active_members_by_column_day,
-        year=year, month=month,
+        year=year, month=month, locked=LockedMonth.is_locked(year, month),
         month_name=MONTH_NAMES[month], month_names=MONTH_NAMES, day_range=range(1, num_days + 1),
         day_weekday_names=day_weekday_names, grid=grid, edit_mode=edit_mode, employees_json=employees_json,
         shift_type_meta_json=json.dumps(shift_type_meta),
@@ -961,6 +962,10 @@ def schedule():
 def generate():
     year = request.form.get("anno", type=int)
     month = request.form.get("mese", type=int)
+
+    if LockedMonth.is_locked(year, month):
+        flash("Questo mese e' bloccato/finalizzato: sblocalo prima di rigenerare i turni.", "warning")
+        return redirect(url_for("main.schedule", anno=year, mese=month))
 
     settings = Settings.get()
     people = Employee.query.filter_by(active=True).order_by(Employee.name).all()
@@ -1164,6 +1169,11 @@ def _manual_conflict_pairs(shift_types):
 def save_schedule():
     year = request.form.get("anno", type=int)
     month = request.form.get("mese", type=int)
+
+    if LockedMonth.is_locked(year, month):
+        flash("Questo mese e' bloccato/finalizzato: sblocalo prima di modificarlo.", "warning")
+        return redirect(url_for("main.schedule", anno=year, mese=month))
+
     num_days = calendar.monthrange(year, month)[1]
 
     types = ShiftType.query.all()
@@ -1224,6 +1234,9 @@ def save_schedule():
 def clear_schedule():
     year = request.form.get("anno", type=int)
     month = request.form.get("mese", type=int)
+    if LockedMonth.is_locked(year, month):
+        flash("Questo mese e' bloccato/finalizzato: sblocalo prima di cancellare i turni.", "warning")
+        return redirect(url_for("main.schedule", anno=year, mese=month))
     n = Assignment.query.filter_by(year=year, month=month).delete()
     db.session.commit()
     flash(f"Pianificazione di {MONTH_NAMES[month]} {year} cancellata ({n} assegnazione/i rimossa/e).", "success")
@@ -1234,10 +1247,34 @@ def clear_schedule():
 def clear_auto_schedule():
     year = request.form.get("anno", type=int)
     month = request.form.get("mese", type=int)
+    if LockedMonth.is_locked(year, month):
+        flash("Questo mese e' bloccato/finalizzato: sblocalo prima di cancellare i turni.", "warning")
+        return redirect(url_for("main.schedule", anno=year, mese=month))
     n = Assignment.query.filter_by(year=year, month=month, auto_generated=True).delete()
     db.session.commit()
     flash(f"{n} assegnazione/i automatica/che cancellata/e (quelle manuali restano).", "success")
     return redirect(url_for("main.schedule", anno=year, mese=month, modifica=1))
+
+
+@bp.route("/pianificazione/blocca", methods=["POST"])
+def lock_schedule_month():
+    year = request.form.get("anno", type=int)
+    month = request.form.get("mese", type=int)
+    if not LockedMonth.is_locked(year, month):
+        db.session.add(LockedMonth(year=year, month=month))
+        db.session.commit()
+    flash(f"{MONTH_NAMES[month]} {year} bloccato/finalizzato: non e' piu' modificabile finche' non lo sblocchi.", "success")
+    return redirect(url_for("main.schedule", anno=year, mese=month))
+
+
+@bp.route("/pianificazione/sblocca", methods=["POST"])
+def unlock_schedule_month():
+    year = request.form.get("anno", type=int)
+    month = request.form.get("mese", type=int)
+    LockedMonth.query.filter_by(year=year, month=month).delete()
+    db.session.commit()
+    flash(f"{MONTH_NAMES[month]} {year} sbloccato: torna di nuovo modificabile.", "success")
+    return redirect(url_for("main.schedule", anno=year, mese=month))
 
 
 @bp.route("/pianificazione/esporta.csv")

@@ -221,6 +221,24 @@ class Settings(db.Model):
         return settings
 
 
+class LockedMonth(db.Model):
+    """Mese 'finalizzato': blocca modifiche manuali e rigenerazione automatica
+    dei turni per quel mese, cosi' i dati usati come memoria dai mesi
+    successivi (smonti, settimane di corsia, distanze minime...) non possono
+    piu' essere alterati per sbaglio."""
+
+    __tablename__ = "locked_month"
+    __table_args__ = (db.UniqueConstraint("year", "month", name="uq_locked_month"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)
+
+    @classmethod
+    def is_locked(cls, year, month):
+        return cls.query.filter_by(year=year, month=month).first() is not None
+
+
 class Availability(db.Model):
     __tablename__ = "availability"
     __table_args__ = (

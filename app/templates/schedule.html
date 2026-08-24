@@ -18,13 +18,25 @@
 
   <a class="btn secondary" href="{{ url_for('main.export_schedule_csv', anno=year, mese=month) }}">Esporta CSV</a>
   <a class="btn secondary" href="{{ url_for('main.export_schedule_xlsx', anno=year, mese=month) }}">Esporta Excel</a>
-  {% if edit_mode %}
-  <a class="btn secondary" href="{{ url_for('main.schedule', anno=year, mese=month) }}">👁 Vista sola lettura</a>
-  {% else %}
-  <a class="btn secondary" href="{{ url_for('main.schedule', anno=year, mese=month, modifica=1) }}">✏️ Modifica manualmente</a>
+  {% if not locked %}
+    {% if edit_mode %}
+    <a class="btn secondary" href="{{ url_for('main.schedule', anno=year, mese=month) }}">👁 Vista sola lettura</a>
+    {% else %}
+    <a class="btn secondary" href="{{ url_for('main.schedule', anno=year, mese=month, modifica=1) }}">✏️ Modifica manualmente</a>
+    {% endif %}
   {% endif %}
 </form>
 
+{% if locked %}
+<div class="card" style="background:#fdf1de">
+  <strong>🔒 Mese bloccato/finalizzato.</strong> Non è più possibile generare, modificare o cancellare i turni di {{ month_name }} {{ year }} finché non lo sblocchi.
+  <form method="post" action="{{ url_for('main.unlock_schedule_month') }}" class="inline">
+    <input type="hidden" name="anno" value="{{ year }}">
+    <input type="hidden" name="mese" value="{{ month }}">
+    <button type="submit" class="secondary">🔓 Sblocca mese</button>
+  </form>
+</div>
+{% else %}
 <form method="post" action="{{ url_for('main.generate') }}" class="toolbar" onsubmit="return confirm('Questo sovrascriverà i turni generati automaticamente per questo mese (le modifiche manuali salvate restano se non le rigeneri). Continuare?');">
   <input type="hidden" name="anno" value="{{ year }}">
   <input type="hidden" name="mese" value="{{ month }}">
@@ -43,9 +55,16 @@
   <button type="submit" class="danger">🗑 Pulisci tutto il mese</button>
 </form>
 
-<p><small>Assicurati di aver inserito le <a href="{{ url_for('main.availability', anno=year, mese=month) }}">disponibilità</a> per {{ month_name }} {{ year }} prima di generare. I turni <span class="chip chip-manual" style="padding:0 0.4rem">esempio</span> arancioni sono quelli inseriti a mano; restano tali finché non li tocchi di nuovo, anche rigenerando gli altri.</small></p>
+<form method="post" action="{{ url_for('main.lock_schedule_month') }}" class="toolbar" onsubmit="return confirm('Bloccare/finalizzare {{ month_name }} {{ year }}? Non si potrà più generare, modificare o cancellare finché non lo sblocchi.');">
+  <input type="hidden" name="anno" value="{{ year }}">
+  <input type="hidden" name="mese" value="{{ month }}">
+  <button type="submit" class="secondary">🔒 Blocca/Finalizza mese</button>
+</form>
 
-{% if edit_mode %}
+<p><small>Assicurati di aver inserito le <a href="{{ url_for('main.availability', anno=year, mese=month) }}">disponibilità</a> per {{ month_name }} {{ year }} prima di generare. I turni <span class="chip chip-manual" style="padding:0 0.4rem">esempio</span> arancioni sono quelli inseriti a mano; restano tali finché non li tocchi di nuovo, anche rigenerando gli altri.</small></p>
+{% endif %}
+
+{% if edit_mode and not locked %}
 <form method="post" action="{{ url_for('main.save_schedule') }}" id="schedule-form">
   <input type="hidden" name="anno" value="{{ year }}">
   <input type="hidden" name="mese" value="{{ month }}">
